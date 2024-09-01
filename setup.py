@@ -346,12 +346,10 @@ def install1():
     install_apt_package("git")
     install_apt_package("bluez")
     install_apt_package("bluetooth")
-    install_apt_package("bluez-tools")
     install_apt_package("libportaudio2")
     install_apt_package("libatlas-base-dev")  # Required for NumPy
     install_apt_package("libopencv-dev")      # OpenCV dependencies and OpenCV installation
     install_apt_package("python3-opencv")     # OpenCV Python bindings
-    install_apt_package("libbluetooth-dev")   # Bluetooth dependencies
     install_apt_package("libi2c-dev")         # For SMBus/I2C (corrected package name)
     install_apt_package("i2c-tools")
     install_apt_package("expect")             # Required for the interactive Bluetooth pairing
@@ -369,28 +367,26 @@ def install1():
     install_package("requests")
     install_package("pybluez")  # For Bluetooth
 
-    
-    subprocess.check_call(["sudo", "reboot"])
-    
-def install2():
-    
-
-
-    setup_bluetooth()  # Set up Bluetooth before installing the Audio HAT to avoid reboot interruption
-    
     subprocess.check_call(["sudo", "wget", "https://raw.githubusercontent.com/garagesteve1155/chatgpt_robot/main/main.py"])
     setup_waveshare_audio_hat()  # Install and setup the audio HAT
+    
+    
+
+
+    
+    
+    
 def main():
     parser = argparse.ArgumentParser(description='Setup script for Raspberry Pi project.')
-    parser.add_argument('--mode', type=str, choices=['install1', 'install2', 'test'], required=True,
+    parser.add_argument('--mode', type=str, choices=['install', 'test'], required=True,
                         help='Select mode: "install" to setup or "test" to verify installation.')
     args = parser.parse_args()
 
-    if args.mode == 'install1':
-        install1()
-    elif args.mode == 'install2':
-        install2()
+    if args.mode == 'install':
+        install()
+    
     elif args.mode == 'test':
+        setup_bluetooth()
         wm8960_card_number = get_wm8960_card_number()
         time.sleep(5)
         if wm8960_card_number:
