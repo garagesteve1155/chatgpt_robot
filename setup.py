@@ -337,13 +337,8 @@ def setup_bluetooth():
             pair_with_hc05(address, "1234")
     else:
         print("HC-05 module not found. Please ensure the device is in pairing mode and try again.")
-def install():
-    
 
     
-    
-
-
     
     
     
