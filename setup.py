@@ -337,7 +337,7 @@ def setup_bluetooth():
             pair_with_hc05(address, "1234")
     else:
         print("HC-05 module not found. Please ensure the device is in pairing mode and try again.")
-def install1():
+def install():
     
     print("Updating and upgrading system packages...")
     subprocess.check_call(["sudo", "apt", "update"])
