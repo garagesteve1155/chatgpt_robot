@@ -9,9 +9,9 @@ int right_dir = 4;
 int left_dir = 7;
 int right_speed = 5;
 int left_speed = 6;
-center_pos = 90;
-left_pos = 170;
-right_pos = 10;
+int center_pos = 90;
+int left_pos = 170;
+int right_pos = 10;
 void setup() {
   pinMode(TRIGGER_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
