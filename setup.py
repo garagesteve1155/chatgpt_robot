@@ -327,7 +327,14 @@ def pair_with_hc05(address, passkey):
         return False
 def setup_bluetooth():
     print("Setting up Bluetooth...")
-    subprocess.check_call(["sudo", "systemctl", "start", "bluetooth.service"])
+    while True:
+        try:
+            subprocess.check_call(["sudo", "systemctl", "start", "bluetooth.service"])
+            break
+        except:
+            sudo apt-get install --reinstall pi-bluetooth bluez
+            continue
+
     subprocess.check_call(["sudo", "bluetoothctl", "power", "on"])
     subprocess.check_call(["sudo", "bluetoothctl", "agent", "on"])
 
@@ -337,15 +344,15 @@ def setup_bluetooth():
             pair_with_hc05(address, "1234")
     else:
         print("HC-05 module not found. Please ensure the device is in pairing mode and try again.")
-def install():
+def install1():
     
     print("Updating and upgrading system packages...")
     subprocess.check_call(["sudo", "apt", "update"])
     print("Installing system utilities and development packages...")
     install_apt_package("python3-pip")
     install_apt_package("git")
-    install_apt_package("bluetooth")
     install_apt_package("bluez")
+    install_apt_package("bluetooth")
     install_apt_package("bluez-tools")
     install_apt_package("libportaudio2")
     install_apt_package("libatlas-base-dev")  # Required for NumPy
@@ -369,19 +376,27 @@ def install():
     install_package("requests")
     install_package("pybluez")  # For Bluetooth
 
+    
+    subprocess.check_call(["sudo", "reboot"])
+    
+def install2():
+    
+
+
     setup_bluetooth()  # Set up Bluetooth before installing the Audio HAT to avoid reboot interruption
     
-    subprocess.check_call(["wget", "https://raw.githubusercontent.com/garagesteve1155/chatgpt_robot/main/main.py"])
+    subprocess.check_call(["sudo", "wget", "https://raw.githubusercontent.com/garagesteve1155/chatgpt_robot/main/main.py"])
     setup_waveshare_audio_hat()  # Install and setup the audio HAT
-
 def main():
     parser = argparse.ArgumentParser(description='Setup script for Raspberry Pi project.')
-    parser.add_argument('--mode', type=str, choices=['install', 'test'], required=True,
+    parser.add_argument('--mode', type=str, choices=['install1', 'install2', 'test'], required=True,
                         help='Select mode: "install" to setup or "test" to verify installation.')
     args = parser.parse_args()
 
-    if args.mode == 'install':
-        install()
+    if args.mode == 'install1':
+        install1()
+    elif args.mode == 'install2':
+        install2()
     elif args.mode == 'test':
         wm8960_card_number = get_wm8960_card_number()
         time.sleep(5)
