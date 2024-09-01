@@ -202,21 +202,72 @@ def test_packages():
 def test_camera():
     print("Testing camera capture...")
     try:
+        # Capturing the image
         subprocess.check_call(["raspistill", "-o", "test.jpg"])
         print("Check test.jpg to verify camera capture.")
-        
         import cv2
+        import numpy as np
+        # Load class labels from coco.names file
+        with open("coco.names", "r") as f:
+            classes = [line.strip() for line in f.readlines()]
+
+        # Load YOLOv4-tiny configuration and weights
+        net = cv2.dnn.readNet("yolov4-tiny.weights", "yolov4-tiny.cfg")
+        layer_names = net.getLayerNames()
+        output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
+
+        # Load image
         image = cv2.imread("test.jpg")
-        if image is not None:
-            print("Displaying the captured image...")
-            cv2.imshow("Captured Image", image)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-            print("Camera test passed.")
+        height, width, channels = image.shape
+
+        # Convert image to blob
+        blob = cv2.dnn.blobFromImage(image, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
+        net.setInput(blob)
+
+        # Perform the detection
+        outs = net.forward(output_layers)
+
+        # Check for any object detected
+        class_ids = []
+        confidences = []
+        boxes = []
+        for out in outs:
+            for detection in out:
+                scores = detection[5:]
+                class_id = np.argmax(scores)
+                confidence = scores[class_id]
+                if confidence > 0.5:
+                    # Object detected
+                    center_x = int(detection[0] * width)
+                    center_y = int(detection[1] * height)
+                    w = int(detection[2] * width)
+                    h = int(detection[3] * height)
+
+                    # Rectangle coordinates
+                    x = int(center_x - w / 2)
+                    y = int(center_y - h / 2)
+
+                    boxes.append([x, y, w, h])
+                    confidences.append(float(confidence))
+                    class_ids.append(class_id)
+
+        # Print detected objects
+        for i, box in enumerate(boxes):
+            x, y, w, h = box
+            label = str(classes[class_ids[i]])
+            confidence = confidences[i]
+            print(f"Detected: {label} with confidence {confidence}")
+
+        if boxes:
+            print(f"Total objects detected: {len(boxes)}")
         else:
-            print("Failed to load the captured image. Camera test failed.")
+            print("No objects detected.")
+
+        print("Camera test passed.")
     except subprocess.CalledProcessError:
         print("Camera test failed.")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
 
 def test_bluetooth():
     print("Testing Bluetooth connection to HC-05...")
@@ -287,7 +338,7 @@ def setup_bluetooth():
     else:
         print("HC-05 module not found. Please ensure the device is in pairing mode and try again.")
 def install():
-    """
+    
     print("Updating and upgrading system packages...")
     subprocess.check_call(["sudo", "apt", "update"])
     print("Installing system utilities and development packages...")
@@ -305,7 +356,11 @@ def install():
     install_apt_package("i2c-tools")
     install_apt_package("expect")             # Required for the interactive Bluetooth pairing
     install_apt_package("espeak")             # espeak installation for TTS
-    """
+    
+    print('Downloading YOLO files for object recognition')
+    subprocess.check_call(["sudo", "wget", "https://raw.githubusercontent.com/AlexeyAB/darknet/master/cfg/yolov4-tiny.cfg"])
+    subprocess.check_call(["sudo", "wget", "https://raw.githubusercontent.com/AlexeyAB/darknet/master/data/coco.names"])
+    subprocess.check_call(["sudo", "wget", "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4-tiny.weights"])
     print("Installing Python packages...")
     install_package("pyaudio")
     install_package("numpy")
@@ -317,7 +372,7 @@ def install():
     setup_bluetooth()  # Set up Bluetooth before installing the Audio HAT to avoid reboot interruption
     
     subprocess.check_call(["wget", "https://raw.githubusercontent.com/garagesteve1155/chatgpt_robot/main/main.py"])
-    #setup_waveshare_audio_hat()  # Install and setup the audio HAT
+    setup_waveshare_audio_hat()  # Install and setup the audio HAT
 
 def main():
     parser = argparse.ArgumentParser(description='Setup script for Raspberry Pi project.')
