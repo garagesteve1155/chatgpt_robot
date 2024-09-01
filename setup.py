@@ -351,6 +351,7 @@ def main():
     if args.mode == 'install':
         print("Updating and upgrading system packages...")
         subprocess.check_call(["sudo", "apt", "update"])
+        subprocess.check_call(["sudo", "apt", "upgrade", "-y"])
         print("Installing system utilities and development packages...")
         install_apt_package("python3-pip")
         install_apt_package("git")
