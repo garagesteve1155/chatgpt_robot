@@ -339,36 +339,7 @@ def setup_bluetooth():
         print("HC-05 module not found. Please ensure the device is in pairing mode and try again.")
 def install():
     
-    print("Updating and upgrading system packages...")
-    subprocess.check_call(["sudo", "apt", "update"])
-    print("Installing system utilities and development packages...")
-    install_apt_package("python3-pip")
-    install_apt_package("git")
-    install_apt_package("bluez")
-    install_apt_package("bluetooth")
-    install_apt_package("libportaudio2")
-    install_apt_package("libatlas-base-dev")  # Required for NumPy
-    install_apt_package("libopencv-dev")      # OpenCV dependencies and OpenCV installation
-    install_apt_package("python3-opencv")     # OpenCV Python bindings
-    install_apt_package("libi2c-dev")         # For SMBus/I2C (corrected package name)
-    install_apt_package("i2c-tools")
-    install_apt_package("expect")             # Required for the interactive Bluetooth pairing
-    install_apt_package("espeak")             # espeak installation for TTS
-    
-    print('Downloading YOLO files for object recognition')
-    subprocess.check_call(["sudo", "wget", "https://raw.githubusercontent.com/AlexeyAB/darknet/master/cfg/yolov4-tiny.cfg"])
-    subprocess.check_call(["sudo", "wget", "https://raw.githubusercontent.com/AlexeyAB/darknet/master/data/coco.names"])
-    subprocess.check_call(["sudo", "wget", "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4-tiny.weights"])
-    print("Installing Python packages...")
-    install_package("pyaudio")
-    install_package("numpy")
-    install_package("SpeechRecognition")
-    install_package("webrtcvad")
-    install_package("requests")
-    install_package("pybluez")  # For Bluetooth
 
-    subprocess.check_call(["sudo", "wget", "https://raw.githubusercontent.com/garagesteve1155/chatgpt_robot/main/main.py"])
-    setup_waveshare_audio_hat()  # Install and setup the audio HAT
     
     
 
@@ -383,7 +354,36 @@ def main():
     args = parser.parse_args()
 
     if args.mode == 'install':
-        install()
+        print("Updating and upgrading system packages...")
+        subprocess.check_call(["sudo", "apt", "update"])
+        print("Installing system utilities and development packages...")
+        install_apt_package("python3-pip")
+        install_apt_package("git")
+        install_apt_package("bluez")
+        install_apt_package("bluetooth")
+        install_apt_package("libportaudio2")
+        install_apt_package("libatlas-base-dev")  # Required for NumPy
+        install_apt_package("libopencv-dev")      # OpenCV dependencies and OpenCV installation
+        install_apt_package("python3-opencv")     # OpenCV Python bindings
+        install_apt_package("libi2c-dev")         # For SMBus/I2C (corrected package name)
+        install_apt_package("i2c-tools")
+        install_apt_package("expect")             # Required for the interactive Bluetooth pairing
+        install_apt_package("espeak")             # espeak installation for TTS
+        
+        print('Downloading YOLO files for object recognition')
+        subprocess.check_call(["sudo", "wget", "https://raw.githubusercontent.com/AlexeyAB/darknet/master/cfg/yolov4-tiny.cfg"])
+        subprocess.check_call(["sudo", "wget", "https://raw.githubusercontent.com/AlexeyAB/darknet/master/data/coco.names"])
+        subprocess.check_call(["sudo", "wget", "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4-tiny.weights"])
+        print("Installing Python packages...")
+        install_package("pyaudio")
+        install_package("numpy")
+        install_package("SpeechRecognition")
+        install_package("webrtcvad")
+        install_package("requests")
+        install_package("pybluez")  # For Bluetooth
+    
+        subprocess.check_call(["sudo", "wget", "https://raw.githubusercontent.com/garagesteve1155/chatgpt_robot/main/main.py"])
+        setup_waveshare_audio_hat()  # Install and setup the audio HAT
     
     elif args.mode == 'test':
         setup_bluetooth()
