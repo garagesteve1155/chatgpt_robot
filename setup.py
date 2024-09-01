@@ -327,14 +327,7 @@ def pair_with_hc05(address, passkey):
         return False
 def setup_bluetooth():
     print("Setting up Bluetooth...")
-    while True:
-        try:
-            subprocess.check_call(["sudo", "systemctl", "start", "bluetooth.service"])
-            break
-        except:
-            sudo apt-get install --reinstall pi-bluetooth bluez
-            continue
-
+    subprocess.check_call(["sudo", "systemctl", "start", "bluetooth.service"])
     subprocess.check_call(["sudo", "bluetoothctl", "power", "on"])
     subprocess.check_call(["sudo", "bluetoothctl", "agent", "on"])
 
