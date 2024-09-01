@@ -30,7 +30,6 @@ void setup() {
   ESC2.attach(10);
   ESC1.write(90);
   ESC2.write(center_pos);
-  ESC2.detach();
 }
 
 void loop() {
