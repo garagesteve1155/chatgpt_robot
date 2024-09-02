@@ -385,6 +385,7 @@ def main():
         install_apt_package("python3-opencv")     # OpenCV Python bindings
         install_apt_package("libi2c-dev")         # For SMBus/I2C (corrected package name)
         install_apt_package("i2c-tools")
+        install_apt_package("flac")
         install_apt_package("expect")             # Required for the interactive Bluetooth pairing
         install_apt_package("espeak")             # espeak installation for TTS
         
@@ -396,6 +397,9 @@ def main():
         install_package("pyaudio")
         install_package("numpy")
         install_package("SpeechRecognition")
+        subprocess.check_call(["sudo", "pip3", "install", "SpeechRecognition", "--upgrade"])
+        subprocess.check_call(["sudo", "pip3", "install", "pydantic", "--upgrade"])
+        subprocess.check_call(["sudo", "pip3", "install", "typing_extensions", "--upgrade"])
         install_package("webrtcvad")
         install_package("requests")
         install_package("pybluez")  # For Bluetooth
