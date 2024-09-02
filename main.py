@@ -1,4 +1,4 @@
-
+import re
 import pyaudio
 import speech_recognition as sr
 import subprocess
@@ -116,6 +116,22 @@ def remove_overlapping_boxes(boxes, class_ids, confidences):
             final_confidences.append(confidences[i])
 
     return final_boxes, final_class_ids, final_confidences
+def get_wm8960_card_number():
+    print("Finding WM8960 Audio HAT card number...")
+    result = subprocess.run(["aplay", "-l"], stdout=subprocess.PIPE, text=True)
+    match = re.search(r"card (\d+): wm8960sound", result.stdout)
+    if match:
+        card_number = match.group(1)
+        print(f"WM8960 Audio HAT found on card {card_number}")
+        return card_number
+    else:
+        print("WM8960 Audio HAT not found.")
+        return None
+def set_max_volume(card_number):
+    print("Setting maximum volume...")
+    subprocess.run(["amixer", "-c", card_number, "sset", 'Headphone', '100%'], check=True)
+    subprocess.run(["amixer", "-c", card_number, "sset", 'Speaker', '100%'], check=True)
+
 def handle_playback(stream):
     global is_transcribing
     with open('playback_text.txt', 'r') as file:
@@ -124,8 +140,26 @@ def handle_playback(stream):
             print("Playback text found, initiating playback...")
             stream.stop_stream()
             is_transcribing = True
+
+            # Generate speech from text
             subprocess.call(['espeak', '-v', 'en-us', '-s', '180', '-p', '100', '-a', '200', '-w', 'temp.wav', text])
-            subprocess.run(['aplay', 'temp.wav'])
+
+            # Get the correct sound device for the WM8960 sound card
+            wm8960_card_number = get_wm8960_card_number()
+            if wm8960_card_number:
+                # Set volume to maximum before playback
+                set_max_volume(wm8960_card_number)
+
+                # Play the sound file on the WM8960 sound card
+                subprocess.check_call([
+                    "aplay",
+                    "-D", f"plughw:{wm8960_card_number}",
+                    'temp.wav'
+                ])
+            else:
+                print("WM8960 sound card not found. Playing on default device.")
+                subprocess.run(['aplay', 'temp.wav'])
+
             os.remove('temp.wav')
             open('playback_text.txt', 'w').close()
             stream.start_stream()
@@ -157,9 +191,8 @@ def process_audio_data(data_buffer, recognizer, sample_width):
             file = open('last_phrase.txt', 'w+')
             file.write(text)
             file.close()
-            time.sleep(1)
-        except:
-            pass
+        except Exception as e:
+            print(e)
 
 def listen_and_transcribe():
     global is_transcribing
@@ -457,10 +490,14 @@ def get_topics(topics, filename_list):
 def send_text_to_gpt4_move(phrase, history, topics, percent, current_distance):
     global camera_horizontal_pos
     global camera_vertical_pos
-
-    with open('output.jpg', "rb") as image_file:
-        base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-
+    now = datetime.now()
+    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+    try:
+        with open('output.jpg', "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+    except:
+        with open('this_temp.jpg', "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')        
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
@@ -468,14 +505,17 @@ def send_text_to_gpt4_move(phrase, history, topics, percent, current_distance):
 
     topic_index = 0
     memories = 'No memories yet for any contextually relevant topics.'
-	file = open('output.txt', 'r')
-	yolo_description = file.read()
-	file.close()
-	chat_history.append(str(the_time) + ' - YOLOV4-tiny object recognition data for current image at this timestamp: \n\n' + str(yolo_description))
+    try:
+        file = open('output.txt', 'r')
+        yolo_description = file.read()
+        file.close()
+    except:
+        yolo_description = 'No YOLO object description'
+    chat_history.append(str(the_time) + ' - YOLOV4-tiny object recognition data for current image at this timestamp: \n\n' + str(yolo_description))
     while True:
         try:
             current_topic = topics[topic_index]
-            file = open('/home/ollie/Desktop/Robot/Current/memories/' + current_topic + '.txt', 'r')
+            file = open(current_topic + '.txt', 'r')
             if topic_index == 0:
                 memories = file.read()
             else:
@@ -539,7 +579,8 @@ def send_text_to_gpt4_convo(history, text):
     global topics
     topic_index = 0
     memories = 'No memories yet for any contextually relevant topics.'
-    filenames = [os.path.splitext(file)[0] for file in os.listdir('/home/ollie/Desktop/Robot/Current/memories/') if os.path.isfile(os.path.join('/home/ollie/Desktop/Robot/Current/memories/', file))]
+    home_directory = os.path.expanduser('~')
+    filenames = [os.path.splitext(file)[0] for file in os.listdir(home_directory) if os.path.isfile(os.path.join(home_directory, file))]
     filenames_string = ', '.join(filenames)
 
     now = datetime.now()
@@ -591,7 +632,7 @@ def get_summary(history, topics):
     while True:
         try:
             current_topic = topics[topic_index]
-            file = open('/home/ollie/Desktop/Robot/Current/memories/' + current_topic + '.txt', 'r')
+            file = open(current_topic + '.txt', 'r')
             if topic_index == 0:
                 memories = file.read()
             else:
@@ -666,75 +707,68 @@ def get_last_phrase():
     except Exception as e:
         print(f"Error reading last phrase from file: {e}")
         return ''
-
 def yolo_loop():
-	# Load YOLOv4-tiny configuration and weights
-	net = cv2.dnn.readNet("yolov4-tiny.cfg", "yolov4-tiny.weights")
+    # Load YOLOv4-tiny configuration and weights
+    net = cv2.dnn.readNet("yolov4-tiny.cfg", "yolov4-tiny.weights")
 
-	# Load COCO names
-	with open("coco.names", "r") as f:
-		classes = [line.strip() for line in f.readlines()]
+    # Load COCO names
+    with open("coco.names", "r") as f:
+        classes = [line.strip() for line in f.readlines()]
 
-	layer_names = net.getLayerNames()
-	output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
+    layer_names = net.getLayerNames()
+    # Adjust the index extraction to handle the nested array structure
+    output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
 
-	while True:
-		# Open the image file
-		img = cv2.imread("this_temp.jpg")
-		if img is None:
-			print("Image not found or unable to load. Check the path and try again.")
-			break
+    while True:
+        # Open the image file
+        img = cv2.imread("this_temp.jpg")
+        if img is None:
+            print("Image not found or unable to load. Check the path and try again.")
+            break
 
-		height, width, channels = img.shape
+        height, width, channels = img.shape
 
-		# Prepare the image for YOLO
-		blob = cv2.dnn.blobFromImage(img, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
-		net.setInput(blob)
-		outs = net.forward(output_layers)
+        # Prepare the image for YOLO
+        blob = cv2.dnn.blobFromImage(img, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
+        net.setInput(blob)
+        outs = net.forward(output_layers)
 
-		# Process the outputs
-		class_ids = []
-		confidences = []
-		boxes = []
+        # Process the outputs
+        class_ids = []
+        confidences = []
+        boxes = []
 
-		for out in outs:
-			for detection in out:
-				scores = detection[5:]
-				class_id = np.argmax(scores)
-				confidence = scores[class_id]
-				if confidence > 0.5:
-					center_x = int(detection[0] * width)
-					center_y = int(detection[1] * height)
-					w = int(detection[2] * width)
-					h = int(detection[3] * height)
-					x = int(center_x - w / 2)
-					y = int(center_y - h / 2)
-					boxes.append([x, y, w, h])
-					confidences.append(float(confidence))
-					class_ids.append(class_id)
+        for out in outs:
+            for detection in out:
+                scores = detection[5:]
+                class_id = np.argmax(scores)
+                confidence = scores[class_id]
+                if confidence > 0.5:
+                    center_x = int(detection[0] * width)
+                    center_y = int(detection[1] * height)
+                    w = int(detection[2] * width)
+                    h = int(detection[3] * height)
+                    x = int(center_x - w / 2)
+                    y = int(center_y - h / 2)
+                    boxes.append([x, y, w, h])
+                    confidences.append(float(confidence))
+                    class_ids.append(class_id)
 
-		# Remove overlapping boxes of the same class
-		boxes, class_ids, confidences = remove_overlapping_boxes(boxes, class_ids, confidences)
+        # Remove overlapping boxes of the same class
+        indices = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
+        for i in indices:
+            i = i[0]
+            x, y, w, h = boxes[i]
+            label = str(classes[class_ids[i]])
+            color = (0, 255, 0)
+            cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
+            cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-		# Prepare text description and draw bounding boxes on the image
-		descriptions = []
-		for i in range(len(boxes)):
-			x, y, w, h = boxes[i]
-			label = str(classes[class_ids[i]])
-			position = get_position_description(x + w // 2, y + h // 2, width, height)
-			size = get_size_description(w, h, width, height)
-			color = (0, 255, 0)
-			cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
-			cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 3)
-			descriptions.append(f"{label} located at the {position} with a {size} bounding box, confidence: {confidences[i]:.2f}")
+        # Save the boxed and labeled image to a file
+        cv2.imwrite("output.jpg", img)
+        break
 
-		# Save the description to a text file
-		with open("output.txt", "w") as f:
-			for desc in descriptions:
-				f.write(desc + "\n")
 
-		# Save the boxed and labeled image to a file
-		cv2.imwrite("output.jpg", img)
 
 def movement_loop(camera, raw_capture):
     global chat_history
@@ -780,7 +814,7 @@ def movement_loop(camera, raw_capture):
                         
                         now = datetime.now()
                         the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                        file = open('/home/ollie/Desktop/Robot/Current/memories/' + current_topic + '.txt', 'a+')
+                        file = open(current_topic + '.txt', 'a+')
                         file.write('\n\n Convo and Action Summary from ' + the_time + ':\n\n' + summary)
                         file.close()
                         topic_index += 1
@@ -835,7 +869,8 @@ def movement_loop(camera, raw_capture):
                     
                     
                     if topics != last_topics:
-                        filenames = [os.path.splitext(file)[0] for file in os.listdir('/home/ollie/Desktop/Robot/Current/memories/') if os.path.isfile(os.path.join('/home/ollie/Desktop/Robot/Current/memories/', file))]
+                        home_directory = os.path.expanduser('~')
+                        filenames = [os.path.splitext(file)[0] for file in os.listdir(home_directory) if os.path.isfile(os.path.join(home_directory, file))]
                         filenames_string = ', '.join(filenames)
 
                         all_topics = get_topics(topics, filenames_string)
@@ -933,7 +968,7 @@ def movement_loop(camera, raw_capture):
                     
                                 now = datetime.now()
                                 the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                                file = open('/home/ollie/Desktop/Robot/Current/memories/' + current_topic + '.txt', 'a+')
+                                file = open(current_topic + '.txt', 'a+')
                                 file.write('\n\n Convo and Action Summary from ' + the_time + ':\n\n' + summary)
                                 file.close()
                                 topic_index += 1
@@ -981,6 +1016,8 @@ if __name__ == "__main__":
             chat_history = []
             stop_threads = False
             human_detected = False
+            frame = capture_image(camera, raw_capture)
+            cv2.imwrite('this_temp.jpg', frame)
             while not human_detected:
                 last_phrase = get_last_phrase()
                 if last_phrase == '':
@@ -994,8 +1031,7 @@ if __name__ == "__main__":
                     name_heard = False
        
                 if name_heard == True:
-					frame = capture_image(camera, raw_capture)
-					cv2.imwrite('this_temp.jpg', frame)
+
                     print("Name heard, initializing...")
                     say_greeting(last_phrase)
                     human_detected = True
