@@ -376,6 +376,7 @@ def main():
         install_apt_package("python3-pip")
         install_apt_package("git")
         install_apt_package("pi-bluetooth")
+        install_apt_package("blueman")
         install_apt_package("bluez-tools")
         install_apt_package("bluez")
         install_apt_package("bluetooth")
