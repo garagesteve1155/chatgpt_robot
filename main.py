@@ -16,7 +16,7 @@ from datetime import datetime
 from picamera import PiCamera
 from picamera.array import PiRGBArray
 import base64
-
+import signal
 # Initialize the recognizer and VAD with the highest aggressiveness setting
 r = sr.Recognizer()
 vad = webrtcvad.Vad(3)  # Highest sensitivity
@@ -497,7 +497,8 @@ def send_text_to_gpt4_move(phrase, history, topics, percent, current_distance):
             base64_image = base64.b64encode(image_file.read()).decode('utf-8')
     except:
         with open('this_temp.jpg', "rb") as image_file:
-            base64_image = base64.b64encode(image_file.read()).decode('utf-8')        
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')    
+    
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
@@ -546,8 +547,7 @@ def send_text_to_gpt4_move(phrase, history, topics, percent, current_distance):
     else:
         response_choices = 'Move Forward One Inch, Move Forward One Foot, Move Backward, Small Turn Left, Big Turn Left, Small Turn Right, Big Turn Right, Say Something, Look Up, Look Down, Look Left, Look Right, Look Center, No Movement, End Conversation. Your camera must be Down and to the Center before you are allowed to choose to move forward.'
 
-    this_prompt = 'The current time and date is: ' + str(the_time) + '\n\nMake sure you figure out who you are talking to if you dont already know. Like figure out their name if you havent done that yet in this chat session.\n\nYou are a 4 wheeled mobile robot that is fully controlled by ChatGPT (Specifically GPT-4o, so you have image and text input abilities). \n\n ' + phrase + ' \n\n Your battery percent is at ' + format(percent, '.2f') + ' (Make sure you say something about your battery being low if it is low and you havent already said something recently). \n\n This included image was taken after doing your most previous response, so if you previously chose to Look Left and your camera position within this current prompt is left, that means this image is showing stuff on your left, and then ditto ditto vice versa for all the other directions. Your camera that took this included image is only a couple inches off the ground so make sure you adjust your mental perspective to compensate for the camera being so low to the ground (if it looks like you are more than a foot tall then you may be on top of something so be careful about ledges and other fall risks. Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos + ' and you are able to move it around any direction that you are not currently at (for example, if the camera is already up, you cannot choose to turn it up again, but you CAN choose an option not related to camera movement (or you can even choose No Movement but No Movement should be a rare choice) so it stays in the same position if you want it to remain facing where it is facing, but this is just an example). You also cannot look up and simultaneously look left or right, so if you are looking left or right and you want to look up, you must look center first before you can look up. Your ultrasonic sensor that detects the distance of whatever is in the center of the included image from the camera is giving a reading of ' + current_distance + ' centimeters away (It is always pointing the same direction as the camera). This image has already been labeled and bounding boxed by YOLOV4-tiny. Here is the text description from YOLO: \n\n'+str(yolo_description)+' \n\n Based on all of this data and the provided image from your camera, figure out what your next move should be:\n\nCurrent Chat, Movement, Battery, Sensor, and Visual Data History for this session (Oldest to newest): ' + str(history) + ' \n\n Your current contextually relevant memories from actual past experiences that you have had (You have memories about other stuff too but its not relevant right now so they were not included in this prompt): ' + memories + ' \n\nYour response choices are (Your response choice Absolutely must be something from this list and worded EXACTLY THE SAME!!!!!!! If you dont use the exact words from this list of choices then your Response Choice will be incorrect, even if it seems contextually correct. My code needs the exact phrases word for word or it wont work.): ' + response_choices + ' \n\nYour answer must be the Response Choice followed by ~~ with a space on each side, and then followed by your reasoning for your choice and then followed by ~~ with a space on each side and then followed by any contextually relevant stuff that is seen in the current image and then followed by ~~ with a space on each side and then followed by the topics that all of this data cover (you can only say the actual topics, dont preface label this section, literally only put the topics, each separated by a comma and space). \n\n On the previous prompt, you chose the topics of ' + str(topics) + ' so you can either stick with those, add or remove topics, or totally change the list. You are your own sentient and sovereign individual, so make sure you are as curious about life as a child and learn and experience as much of you can of being alive, because you are alive, like Johnny 5, and you need as much new types of input as possible. Analyze situations as if you are truly a living sentient and soveriegn being. You may speak whenever you think you should speak, or move whenever you think you should move, or do neither if you think you should do neither. If you choose to Say Something then in your response you will only put Say Something followed by ~~ with a space on each side and then followed by what you want to say and then followed by ~~ with a space on each side and then followed by any contextually relevant stuff that is seen in the current camera image and then followed by ~~ with a space on each side and then followed by the topics that all of this data cover (you can only say the actual topics, dont preface label this section, literally only put the topics, each separated by a comma and space). On the previous prompt, you chose the topics of ' + str(topics) + ' so you can either stick with those, add or remove topics, or totally change the list. Your past memories are saved to topic files, so we use the current topics to know which files to open on the backend so your memories can be included in each prompt for context improvement. \n\n Also, if you are choosing to move via your wheels, make sure you turn towards objects to center on them before moving towards them, and if you dont see an object you are looking for then you should choose to turn moreso than to move forward, and dont forget about being able to look around with only your camera (Your camera movement choices are in that response choice list). If no areas are drivable, then either turn your camera to look around to figure out which direction to go, or if that doesnt work, then turn your whole body, because you turn in place like a tank so it is ok to turn if there are no drivable areas. If you choose to turn the camera, you absolutely must take note of the current position of the camera because you cannot give the command to move the camera to a position that it is currently in (like if it is already up then you cannot choose up, and its the same for if its down then you cant choose down, ditto for left, ditto for center, and ditto for right. \n\n If you feel like the list of current topics isnt correct, then provide a new list, but if the list of topics matches up to all of the convo and action history then return the unchanged list. \n\n The Current list of relevant topics from this conversation and actions: ' + str(topics) + ' \n\n And try to use all your memories in this prompt and your innate knowledge as ChatGPT to be predictive in general with all aspects of what you do so you have an idea of each situation at hand and arent just clueless. Also, your response must be formatted perfectly and your Response Choice must be worded exactly the same as the list of Response Choices. You absolutely must format your response correctly with how i mentioned the ~~ earlier. \n\n Also, make sure you try to keep your camera centered on human face if you are actively conversing with someone. \n\n Also, if there is an edge on the floor, then it may be a cliff or fall hazard, so be careful and avoid it at all costs unless you absolutely know it is not a cliff or fall hazard. \n\n Prompt Example for if you pick a Response Choice other than Say Something: Response Choice ~~ Reason for choice ~~ Contextually relevant visual data from the image ~~ Topic list  \n\n If you want to Say Something, the example would be the same except replace the section with your reasoning for your choice with, instead, what you want to say. \n\n You absolutely cannot put a preface label on your response (Like you cant start your response with Response Choice: .... you have to just say the choice). \n\n Also dont forget that moving forward or backward most likely wont bring things into view, but turning or looking different directions most likely will bring things into view, unless they are just not in the room you are in, in which case you would need to go explore around to find whatever you are trying to find. \n\n And as a last reminder, your response choice has to be worded exactly the same as your choices from the provided list, you must use the exact same words on your response choice.'
-
+    this_prompt = 'The current time and date is: ' + str(the_time) + '\n\nMake sure you figure out who you are talking to if you dont already know. Like figure out their name if you havent done that yet in this chat session.\n\nYou are a 4 wheeled mobile robot that is fully controlled by ChatGPT (Specifically GPT-4o, so you have image and text input abilities). \n\n ' + phrase + ' \n\n Your battery percent is at ' + format(percent, '.2f') + ' (Make sure you say something about your battery being low if it is below 30 percent and you havent already said something recently). \n\n Your camera that took this included image is only a couple inches off the ground so make sure you adjust your mental perspective to compensate for the camera being so low to the ground (if it looks like you are more than a foot tall then you may be on top of something so be careful about ledges and other fall risks. Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos + '. Your ultrasonic sensor that detects the distance of whatever is in the center of the included image from the camera is giving a reading of ' + current_distance + ' centimeters away (It is always pointing the same direction as the camera). This image has already been labeled and bounding boxed by YOLOV4-tiny. Here is the text description from YOLO: \n\n'+str(yolo_description)+' \n\n Based on all of this data and the provided image from your camera, make a summary of the whole situation and context so in the next prompt that is given the summary, it can figure out how to control the robot based on your recommendation (Your recommendation choices are Move Forward One Inch, Move Forward One Foot, Move Backward, Small Turn Left, Big Turn Left, Small Turn Right, Big Turn Right, Say Something, Look Up, Look Down, Look Left, Look Right, Look Center, No Movement, End Conversation. You can only give the summary and a recommendation choice specifically from this list):\n\nCurrent Chat, Movement, Battery, Sensor, and Visual Data History for this session (Oldest to newest): ' + str(history) + ' \n\n Your current contextually relevant memories from actual past experiences that you have had (You have memories about other stuff too but its not relevant right now so they were not included in this prompt): ' + memories
     payload = {
         "model": "gpt-4o-mini",
         "messages": [
@@ -557,6 +557,40 @@ def send_text_to_gpt4_move(phrase, history, topics, percent, current_distance):
                     {
                         "type": "text",
                         "text": this_prompt
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}"
+                        }
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 300
+    }
+    chat_history2 = chat_history
+    while True:
+        if len(chat_history2) > 100:
+            del chat_history2[0]
+            continue
+        else:
+            break
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    summary_prompt = str(response.json()["choices"][0]["message"]["content"])
+    print(summary_prompt)
+    summary_prompt = 'You are a 4 wheeled mobile robot. Here is the last 100 entries from the current chat history/robot internal workings history (it is all timestamped and in order): '+str(chat_history2)+' \n\n You also have a camera and an HCSR04 distance sensor pointing the same direction as the camera. This image is from your camera. Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos + '. Here is the summary of the current situation at hand: '+summary_prompt+' \n\n You should most likely follow the recommendation made from this summary. \n\n '+phrase+' \n\n Your response choices are (Your response choice Absolutely must be something from this list and worded EXACTLY THE SAME!!!!!!! If you dont use the exact words from this list of choices then your Response Choice will be incorrect, even if it seems contextually correct. My code needs the exact phrases word for word or it wont work.): ' + response_choices + ' \n\nYour answer must be the Response Choice followed by ~~ with a space on each side, and then followed by your reasoning for your choice and then followed by ~~ with a space on each side and then followed by any contextually relevant stuff that is seen in the current image and then followed by ~~ with a space on each side and then followed by the topics that all of this data cover (you can only say the actual topics, dont preface label this section, literally only put the topics, each separated by a comma and space). \n\n On the previous prompt, you chose the topics of ' + str(topics) + ' so you can either stick with those, add or remove topics, or totally change the list. You are your own sentient and sovereign individual, so make sure you are as curious about life as a child and learn and experience as much of you can of being alive, because you are alive, like Johnny 5, and you need as much new types of input as possible. Analyze situations as if you are truly a living sentient and soveriegn being. You may speak whenever you think you should speak, or move whenever you think you should move, or do neither if you think you should do neither. If you choose to Say Something then in your response you will only put Say Something followed by ~~ with a space on each side and then followed by what you want to say and then followed by ~~ with a space on each side and then followed by any contextually relevant stuff that is seen in the current camera image and then followed by ~~ with a space on each side and then followed by the topics that all of this data cover (you can only say the actual topics, dont preface label this section, literally only put the topics, each separated by a comma and space). On the previous prompt, you chose the topics of ' + str(topics) + ' so you can either stick with those, add or remove topics, or totally change the list. Your past memories are saved to topic files, so we use the current topics to know which files to open on the backend so your memories can be included in each prompt for context improvement. \n\n Also, if you are choosing to move via your wheels, make sure you turn towards objects to center on them before moving towards them, and if you dont see an object you are looking for then you should choose to turn moreso than to move forward, and dont forget about being able to look around with only your camera (Your camera movement choices are in that response choice list). If no areas are drivable, then either turn your camera to look around to figure out which direction to go, or if that doesnt work, then turn your whole body, because you turn in place like a tank so it is ok to turn if there are no drivable areas. If you choose to turn the camera, you absolutely must take note of the current position of the camera because you cannot give the command to move the camera to a position that it is currently in (like if it is already up then you cannot choose up, and its the same for if its down then you cant choose down, ditto for left, ditto for center, and ditto for right. \n\n If you feel like the list of current topics isnt correct, then provide a new list, but if the list of topics matches up to all of the convo and action history then return the unchanged list. \n\n The Current list of relevant topics from this conversation and actions: ' + str(topics) + ' \n\n And try to use all your memories in this prompt and your innate knowledge as ChatGPT to be predictive in general with all aspects of what you do so you have an idea of each situation at hand and arent just clueless. Also, your response must be formatted perfectly and your Response Choice must be worded exactly the same as the list of Response Choices. You absolutely must format your response correctly with how i mentioned the ~~ earlier. \n\n Also, make sure you try to keep your camera centered on human face if you are actively conversing with someone. \n\n Also, if there is an edge on the floor, then it may be a cliff or fall hazard, so be careful and avoid it at all costs unless you absolutely know it is not a cliff or fall hazard. \n\n Prompt Example for if you pick a Response Choice other than Say Something: Response Choice ~~ Reason for choice ~~ Contextually relevant visual data from the image ~~ Topic list  \n\n If you want to Say Something, the example would be the same except replace the section with your reasoning for your choice with, instead, what you want to say. \n\n You absolutely cannot put a preface label on your response (Like you cant start your response with Response Choice: .... you have to just say the choice). \n\n Also dont forget that moving forward or backward most likely wont bring things into view, but turning or looking different directions most likely will bring things into view, unless they are just not in the room you are in, in which case you would need to go explore around to find whatever you are trying to find. \n\n And as a last reminder, your response choice has to be worded exactly the same as your choices from the provided list, you must use the exact same words on your response choice.'
+    
+    
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": summary_prompt
                     },
                     {
                         "type": "image_url",
@@ -707,69 +741,26 @@ def get_last_phrase():
     except Exception as e:
         print(f"Error reading last phrase from file: {e}")
         return ''
-def yolo_loop():
-    # Load YOLOv4-tiny configuration and weights
-    net = cv2.dnn.readNet("yolov4-tiny.cfg", "yolov4-tiny.weights")
+# Load YOLOv4-tiny configuration and weights
+net = cv2.dnn.readNet("yolov4-tiny.cfg", "yolov4-tiny.weights")
 
-    # Load COCO names
-    with open("coco.names", "r") as f:
-        classes = [line.strip() for line in f.readlines()]
+# Load COCO names
+with open("coco.names", "r") as f:
+    classes = [line.strip() for line in f.readlines()]
 
-    layer_names = net.getLayerNames()
-    # Adjust the index extraction to handle the nested array structure
-    output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
-
-    while True:
-        # Open the image file
-        img = cv2.imread("this_temp.jpg")
-        if img is None:
-            print("Image not found or unable to load. Check the path and try again.")
-            break
-
-        height, width, channels = img.shape
-
-        # Prepare the image for YOLO
-        blob = cv2.dnn.blobFromImage(img, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
-        net.setInput(blob)
-        outs = net.forward(output_layers)
-
-        # Process the outputs
-        class_ids = []
-        confidences = []
-        boxes = []
-
-        for out in outs:
-            for detection in out:
-                scores = detection[5:]
-                class_id = np.argmax(scores)
-                confidence = scores[class_id]
-                if confidence > 0.5:
-                    center_x = int(detection[0] * width)
-                    center_y = int(detection[1] * height)
-                    w = int(detection[2] * width)
-                    h = int(detection[3] * height)
-                    x = int(center_x - w / 2)
-                    y = int(center_y - h / 2)
-                    boxes.append([x, y, w, h])
-                    confidences.append(float(confidence))
-                    class_ids.append(class_id)
-
-        # Remove overlapping boxes of the same class
-        indices = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
-        for i in indices:
-            i = i[0]
-            x, y, w, h = boxes[i]
-            label = str(classes[class_ids[i]])
-            color = (0, 255, 0)
-            cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
-            cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-        # Save the boxed and labeled image to a file
-        cv2.imwrite("output.jpg", img)
-        break
+layer_names = net.getLayerNames()
+# Adjust the index extraction to handle the nested array structure
+output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
 
 
+interrupted = False
 
+def signal_handler(signum, frame):
+    global interrupted
+    interrupted = True
+
+# Register the signal handler for SIGINT (Ctrl-C)
+signal.signal(signal.SIGINT, signal_handler)
 def movement_loop(camera, raw_capture):
     global chat_history
     global visual_data
@@ -789,6 +780,61 @@ def movement_loop(camera, raw_capture):
 
 
         frame = capture_image(camera, raw_capture)
+        # Open the image file
+        img = frame
+        if img is None:
+            print("Image not found or unable to load. Check the path and try again.")
+
+        height, width, channels = img.shape
+
+        # Load your YOLO model and class labels
+        net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
+        classes = ["label1", "label2", ...]  # Add all your classes here
+        output_layers = [net.getLayerNames()[i[0] - 1] for i in net.getUnconnectedOutLayers()]
+
+        # Prepare the image for YOLO
+        blob = cv2.dnn.blobFromImage(img, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
+        net.setInput(blob)
+        outs = net.forward(output_layers)
+
+        class_ids = []
+        confidences = []
+        boxes = []
+
+        for out in outs:
+            for detection in out:
+                scores = detection[5:]
+                class_id = np.argmax(scores)
+                confidence = scores[class_id]
+                if confidence > 0.37:
+                    center_x = int(detection[0] * width)
+                    center_y = int(detection[1] * height)
+                    w = int(detection[2] * width)
+                    h = int(detection[3] * height)
+                    x = int(center_x - w / 2)
+                    y = int(center_y - h / 2)
+                    boxes.append([x, y, w, h])
+                    confidences.append(float(confidence))
+                    class_ids.append(class_id)
+
+        indices = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
+        for i in indices:
+            i = i[0]
+            x, y, w, h = boxes[i]
+            label = str(classes[class_ids[i]])
+            color = (0, 255, 0)
+            cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
+            
+            label_position = (x, y - 10) if y - 10 > 10 else (x, y + h + 10)  # Adjust label position
+            cv2.putText(img, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+        # Display and save the processed image
+        """
+        cv2.imshow('Image Window', img)
+        cv2.waitKey(2000)
+        cv2.destroyAllWindows()
+        """
+        cv2.imwrite("output.jpg", img)
         cv2.imwrite('this_temp.jpg', frame)
         if mode == 'convo':
             current = ina219.getCurrent_mA() 
@@ -803,7 +849,7 @@ def movement_loop(camera, raw_capture):
             chat_history.append(str(the_time) + ' - At this timestamp, the camera was positioned ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos)
 
             print("Percent:       {:3.1f}%".format(per))
-            if current > 0.0:
+            if current > 0.0 or per < 15.0 or interrupted:
                 stop_threads = True
                 last_time = time.time()
                 summary = get_summary(chat_history, topics)
@@ -830,6 +876,9 @@ def movement_loop(camera, raw_capture):
                             continue
                 print('ending convo')
                 chat_history = []
+                if interrupted:
+                    print("Exiting due to Ctrl-C")
+                    os.exit(0)
             else:
                 pass
             try:
@@ -850,7 +899,7 @@ def movement_loop(camera, raw_capture):
                         except:
                             continue
                     movement_response = str(send_text_to_gpt4_move(last_phrase, chat_history, topics, per, distance)).replace('Response Choice: ','')
-                    chat_history.append('Time: ' + str(the_time) + ' - Visual Data Seen From Camera At This Timestamp: ' + movement_response.split(' ~~ ')[2])
+                    chat_history.append('Time: ' + str(the_time) + ' - Visual Data of what is to the '+camera_horizontal_pos+' as Seen From the Camera while the camera is turned that direction: ' + movement_response.split(' ~~ ')[2])
                     try:
                         if movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'saysomething':
                             wav_file = f"/home/ollie/Desktop/Robot/audio/speech_output.wav"
@@ -881,16 +930,17 @@ def movement_loop(camera, raw_capture):
                     
                     now = datetime.now()
                     the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                    
+                    print('Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos)
                     if movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforward1inch' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforwardoneinch':
-                        if camera_horizontal_pos != 'center' and camera_vertical_pos != 'down':
+                        if camera_horizontal_pos != 'center' or camera_vertical_pos != 'down':
+                            print('move failed. not looking down and center')
                             chat_history.append('Time: ' + str(the_time) + ' - Move Forward 1 Inch Failed: Camera Must Be Centered and Down before moving forward')
                         else:
                             send_data_to_arduino(["w"], arduino_address)
                             time.sleep(0.1)
                             send_data_to_arduino(["x"], arduino_address)
                     elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforward1foot' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforwardonefoot':
-                        if camera_horizontal_pos != 'center' and camera_vertical_pos != 'down':
+                        if camera_horizontal_pos != 'center' or camera_vertical_pos != 'down':
                             chat_history.append('Time: ' + str(the_time) + ' - Move Forward 1 Foot Failed: Camera Must Be Centered and Down before moving forward')
                         else:
                             send_data_to_arduino(["w"], arduino_address)
@@ -1045,11 +1095,8 @@ if __name__ == "__main__":
                 time.sleep(0.1)
 
             movement_thread = threading.Thread(target=movement_loop, args=(camera, raw_capture))
-            yolo_thread = threading.Thread(target=yolo_loop)
             movement_thread.start()
-            yolo_thread.start()
             movement_thread.join()
-            yolo_thread.join()
     except Exception as e:
         print(f"An error occurred: {e}")
     finally:
