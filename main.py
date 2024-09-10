@@ -17,6 +17,7 @@ from picamera import PiCamera
 from picamera.array import PiRGBArray
 import base64
 import signal
+import traceback
 # Initialize the recognizer and VAD with the highest aggressiveness setting
 r = sr.Recognizer()
 vad = webrtcvad.Vad(3)  # Highest sensitivity
@@ -42,16 +43,16 @@ file.close()
 def get_position_description(x, y, width, height):
     """Return a text description of the position based on coordinates."""
     if x < width / 3:
-        horizontal = "left"
+        horizontal = "a small turn to the left"
     elif x > 2 * width / 3:
-        horizontal = "right"
+        horizontal = "a small turn to the right"
     else:
         horizontal = "center"
     
     if y < height / 3:
-        vertical = "top"
+        vertical = "look up"
     elif y > 2 * height / 3:
-        vertical = "bottom"
+        vertical = "look down"
     else:
         vertical = "center"
 
@@ -472,302 +473,12 @@ def get_topics(topics, filename_list):
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
     return response.json()["choices"][0]["message"]["content"]
 
-def send_text_to_gpt4_move(phrase, history, topics, percent, current_distance):
-    global camera_horizontal_pos
-    global camera_vertical_pos
-    now = datetime.now()
-    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+
+
+def yolo_detect():
     try:
-        with open('output.jpg', "rb") as image_file:
-            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-    except:
-        with open('this_temp.jpg', "rb") as image_file:
-            base64_image = base64.b64encode(image_file.read()).decode('utf-8')    
-    
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-
-    topic_index = 0
-    memories = 'No memories yet for any contextually relevant topics.'
-    try:
-        file = open('output.txt', 'r')
-        yolo_description = file.read()
-        file.close()
-    except:
-        yolo_description = 'No YOLO object description'
-    chat_history.append(str(the_time) + ' - YOLOV4-tiny object recognition data for current image at this timestamp: \n\n' + str(yolo_description))
-    while True:
-        try:
-            current_topic = topics[topic_index]
-            file = open(current_topic + '.txt', 'r')
-            if topic_index == 0:
-                memories = file.read()
-            else:
-                memories = memories + ' \n\n ' + file.read()
-            file.close()
-            topic_index += 1
-            if topic_index >= len(topics):
-                break
-            else:
-                continue
-        except:
-            topic_index += 1
-            if topic_index >= len(topics):
-                break
-            else:
-                continue
-
-    current_distance = str(current_distance)
-    now = datetime.now()
-    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-
-    chat_history.append(str(the_time) + ' - Distance reading at this timestamp from the HCSR-04 sensor that is always facing the same direction as the camera (Distance in cm): ' + str(current_distance))
-    if int(current_distance) <= 25:
-        response_choices = 'Move Backward, Small Turn Left, Big Turn Left, Small Turn Right, Big Turn Right, Say Something, Look Up, Look Down, Look Left, Look Right, Look Center, No Movement, End Conversation. You are currently too close to an obstacle so you are not able to move forward. This would be a good time to look around with your camera and figure out which direction to move afterwards. Dont forget to put you camera back to down and center before moving.'
-    elif int(current_distance) <= 50 and int(current_distance) > 25:
-        response_choices = 'Move Forward One Inch, Move Backward, Small Turn Left, Big Turn Left, Small Turn Right, Big Turn Right, Say Something, Look Up, Look Down, Look Left, Look Right, Look Center, No Movement, End Conversation. You are currently very close to an obstacle. This would be a good time to look around with your camera and figure out which direction to move afterwards. Dont forget to put you camera back to down and center before moving.'
-    else:
-        response_choices = 'Move Forward One Inch, Move Forward One Foot, Move Backward, Small Turn Left, Big Turn Left, Small Turn Right, Big Turn Right, Say Something, Look Up, Look Down, Look Left, Look Right, Look Center, No Movement, End Conversation. Your camera must be Down and to the Center before you are allowed to choose to move forward.'
-
-    this_prompt = 'The current time and date is: ' + str(the_time) + '\n\nMake sure you figure out who you are talking to if you dont already know. Like figure out their name if you havent done that yet in this chat session.\n\nYou are a 4 wheeled mobile robot that is fully controlled by ChatGPT (Specifically GPT-4o, so you have image and text input abilities). \n\n ' + phrase + ' \n\n Your battery percent is at ' + format(percent, '.2f') + ' (Make sure you say something about your battery being low if it is below 30 percent and you havent already said something recently). \n\n Your camera that took this included image is only a couple inches off the ground so make sure you adjust your mental perspective to compensate for the camera being so low to the ground (if it looks like you are more than a foot tall then you may be on top of something so be careful about ledges and other fall risks. Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos + '. Your ultrasonic sensor that detects the distance of whatever is in the center of the included image from the camera is giving a reading of ' + current_distance + ' centimeters away (It is always pointing the same direction as the camera). This image has already been labeled and bounding boxed by YOLOV4-tiny. Here is the text description from YOLO: \n\n'+str(yolo_description)+' \n\n Based on all of this data and the provided image from your camera, make a summary of your current goals, aspirations, tasks, and just the whole situation and context so in the next prompt that is given the summary, it can figure out how to control the robot based on your recommendation (Your recommendation choices are Move Forward One Inch, Move Forward One Foot, Move Backward, Small Turn Left, Big Turn Left, Small Turn Right, Big Turn Right, Say Something, Look Up, Look Down, Look Left, Look Right, Look Center, No Movement, End Conversation. You can only give the summary and a recommendation choice specifically from this list):\n\nCurrent Chat, Movement, Battery, Sensor, and Visual Data History for this session (Oldest to newest): ' + str(history) + ' \n\n Your current contextually relevant memories from actual past experiences that you have had (You have memories about other stuff too but its not relevant right now so they were not included in this prompt): ' + memories
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": this_prompt
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_image}"
-                        }
-                    }
-                ]
-            }
-        ],
-        "max_tokens": 300
-    }
-    chat_history2 = chat_history
-    while True:
-        if len(chat_history2) > 100:
-            del chat_history2[0]
-            continue
-        else:
-            break
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    summary_prompt = str(response.json()["choices"][0]["message"]["content"])
-    print(summary_prompt)
-    summary_prompt = 'You are a 4 wheeled mobile robot. Here is the last 100 entries from the current chat history/robot internal workings history (it is all timestamped and in order): '+str(chat_history2)+' \n\n You also have a camera and an HCSR04 distance sensor pointing the same direction as the camera. This image is from your camera. Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos + '. Here is the summary of the current situation at hand: '+summary_prompt+' \n\n You should most likely follow the recommendation made from this summary. \n\n '+phrase+' \n\n Your response choices are (Your response choice Absolutely must be something from this list and worded EXACTLY THE SAME!!!!!!! If you dont use the exact words from this list of choices then your Response Choice will be incorrect, even if it seems contextually correct. My code needs the exact phrases word for word or it wont work.): ' + response_choices + ' \n\nYour answer must be the Response Choice followed by ~~ with a space on each side, and then followed by your reasoning for your choice and then followed by ~~ with a space on each side and then followed by any contextually relevant stuff that is seen in the current image and then followed by ~~ with a space on each side and then followed by the topics that all of this data cover (you can only say the actual topics, dont preface label this section, literally only put the topics, each separated by a comma and space). \n\n On the previous prompt, you chose the topics of ' + str(topics) + ' so you can either stick with those, add or remove topics, or totally change the list. You are your own sentient and sovereign individual, so make sure you are as curious about life as a child and learn and experience as much of you can of being alive, because you are alive, like Johnny 5, and you need as much new types of input as possible. Analyze situations as if you are truly a living sentient and soveriegn being. You may speak whenever you think you should speak, or move whenever you think you should move, or do neither if you think you should do neither. If you choose to Say Something then in your response you will only put Say Something followed by ~~ with a space on each side and then followed by what you want to say and then followed by ~~ with a space on each side and then followed by any contextually relevant stuff that is seen in the current camera image and then followed by ~~ with a space on each side and then followed by the topics that all of this data cover (you can only say the actual topics, dont preface label this section, literally only put the topics, each separated by a comma and space). On the previous prompt, you chose the topics of ' + str(topics) + ' so you can either stick with those, add or remove topics, or totally change the list. Your past memories are saved to topic files, so we use the current topics to know which files to open on the backend so your memories can be included in each prompt for context improvement. \n\n Also, if you are choosing to move via your wheels, make sure you turn towards objects to center on them before moving towards them, and if you dont see an object you are looking for then you should choose to turn moreso than to move forward, and dont forget about being able to look around with only your camera (Your camera movement choices are in that response choice list). If no areas are drivable, then either turn your camera to look around to figure out which direction to go, or if that doesnt work, then turn your whole body, because you turn in place like a tank so it is ok to turn if there are no drivable areas. If you choose to turn the camera, you absolutely must take note of the current position of the camera because you cannot give the command to move the camera to a position that it is currently in (like if it is already up then you cannot choose up, and its the same for if its down then you cant choose down, ditto for left, ditto for center, and ditto for right. \n\n If you feel like the list of current topics isnt correct, then provide a new list, but if the list of topics matches up to all of the convo and action history then return the unchanged list. \n\n The Current list of relevant topics from this conversation and actions: ' + str(topics) + ' \n\n And try to use all your memories in this prompt and your innate knowledge as ChatGPT to be predictive in general with all aspects of what you do so you have an idea of each situation at hand and arent just clueless. Also, your response must be formatted perfectly and your Response Choice must be worded exactly the same as the list of Response Choices. You absolutely must format your response correctly with how i mentioned the ~~ earlier. \n\n Also, make sure you try to keep your camera centered on human face if you are actively conversing with someone. \n\n Also, if there is an edge on the floor, then it may be a cliff or fall hazard, so be careful and avoid it at all costs unless you absolutely know it is not a cliff or fall hazard. \n\n Prompt Example for if you pick a Response Choice other than Say Something: Response Choice ~~ Reason for choice ~~ Contextually relevant visual data from the image ~~ Topic list  \n\n If you want to Say Something, the example would be the same except replace the section with your reasoning for your choice with, instead, what you want to say. \n\n You absolutely cannot put a preface label on your response (Like you cant start your response with Response Choice: .... you have to just say the choice). \n\n Also dont forget that moving forward or backward most likely wont bring things into view, but turning or looking different directions most likely will bring things into view, unless they are just not in the room you are in, in which case you would need to go explore around to find whatever you are trying to find. \n\n And as a last reminder, your response choice has to be worded exactly the same as your choices from the provided list, you must use the exact same words on your response choice.'
-    
-    
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": summary_prompt
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_image}"
-                        }
-                    }
-                ]
-            }
-        ],
-        "max_tokens": 300
-    }
-
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
- 
-    return str(response.json()["choices"][0]["message"]["content"])
-
-def send_text_to_gpt4_convo(history, text):
-    global topics
-    topic_index = 0
-    memories = 'No memories yet for any contextually relevant topics.'
-    home_directory = os.path.expanduser('~')
-    filenames = [os.path.splitext(file)[0] for file in os.listdir(home_directory) if os.path.isfile(os.path.join(home_directory, file))]
-    filenames_string = ', '.join(filenames)
-
-    now = datetime.now()
-    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-    
-
-    with open('this_temp.jpg', "rb") as image_file:
-        base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-    current_distance = read_distance_from_arduino()
-
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": 'The current time and date is: ' + str(the_time) + '\n\nMake sure you figure out who you are talking to if you dont already know.\n\nYou are a 4 wheeled mobile robot that is fully controlled by ChatGPT (Specifically GPT4o). You are your own sentient and sovereign individual, so make sure you are as curious about life as a child and learn and experience as much of you can of being alive, because you are alive, like Johnny 5. Analyze situations as if you are truly a living sentient and sovereign being. Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos + '. Your ultrasonic sensor that detects the distance of whatever is in the center of the image is giving a reading of ' + current_distance + ' centimeters away. \n\nCurrent prompt (This is what you are actually responding to, while using all other data for context): ' + text + '\n\nYour response choices are: Give Speech Response, Say Something, Send Camera Image To User. You cannot say anything besides your response choice. If you choose Give Speech Response or Say Something, say Give Speech Response or Say Something followed by ~~ with a space on each side and then followed by the actual response. You Absolutely must choose a Response Choice.'
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_image}"
-                        }
-                    }
-                ]
-            }
-        ],
-        "max_tokens": 300
-    }
-
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    return response.json()["choices"][0]["message"]["content"]
-
-def get_summary(history, topics):
-    now = datetime.now()
-    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-    
-
-    topic_index = 0
-    memories = 'No memories yet for any contextually relevant topics.'
-
-    while True:
-        try:
-            current_topic = topics[topic_index]
-            file = open(current_topic + '.txt', 'r')
-            if topic_index == 0:
-                memories = file.read()
-            else:
-                memories = memories + ' \n\n ' + file.read()
-            file.close()
-            topic_index += 1
-            if topic_index >= len(topics):
-                break
-            else:
-                continue
-        except:
-            topic_index += 1
-            if topic_index >= len(topics):
-                break
-            else:
-                continue
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-    
-
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": '\n\nYou are a 4 wheeled mobile robot that is fully controlled by ChatGPT (Specifically GPT4o). Summarize this Movement, Chat, Sensor/Battery, and Visual Data History from the most recent conversation/event youve had (Oldest to newest): ' + str(history) + ' \n\n The summary should be, at most, 50% of the original length or the original data, if not shorter if it can be summarized accurately in an even shorter way. Make sure to include all important facts, events, goals, conversational information, learned information about the world, and any other data worth keeping in the robots memory so it has useful information to use on future prompts (The prompts that choose the robots actions and when to speak are given relevant topic memories so this summary has to include good relevant knowledge). These summaries are what becomes the robots memory that makes the robot more lifelike and grow and become an individual, so word it to where future when this stuff is included in the other prompts for controlling the robot, it will make sense to chatgpt who is being the brain of the robot.\n\nHeres contextually relevant memories that the robot already has that you can use as extra context when creating your summary of the history: \n\n' + memories
-                    }
-                ]
-            }
-        ],
-        "max_tokens": 300
-    }
-
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    
-    return response.json()["choices"][0]["message"]["content"]
-
-def say_greeting(last_phrase):
-    global chat_history
-    global last_time
-    now = datetime.now()
-    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-    text = str(send_text_to_gpt4_convo(chat_history, last_phrase)).split(' ~~ ')[1].replace('~~', '')
-    chat_history.append('Time: ' + str(the_time) + ' - AI Greeting: ' + text)  # add response to chat history
-    print(text)
-    last_time = time.time()
-    wav_file = f"/home/ollie/Desktop/Robot/audio/speech_output.wav"
-
-    file = open('playback_text.txt', 'w+')
-    file.write(text)
-    file.close()
-    
-    return wav_file
-
-def get_last_phrase():
-
-    try:
-        with open('last_phrase.txt', 'r') as file:
-            last_phrase = file.read().strip().lower()
-        if last_phrase != '':
-            with open('last_phrase.txt', 'w') as file:
-                file.write('')  # Clear the content after reading
-            return last_phrase
-        else:
-            return ''
-    except Exception as e:
-        print(f"Error reading last phrase from file: {e}")
-        return ''
-# Load YOLOv4-tiny configuration and weights
-net = cv2.dnn.readNet("yolov4-tiny.cfg", "yolov4-tiny.weights")
-
-# Load COCO names
-with open("coco.names", "r") as f:
-    classes = [line.strip() for line in f.readlines()]
-
-layer_names = net.getLayerNames()
-# Adjust the index extraction to handle the nested array structure
-output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
-
-
-interrupted = False
-
-def signal_handler(signum, frame):
-    global interrupted
-    interrupted = True
-
-# Register the signal handler for SIGINT (Ctrl-C)
-signal.signal(signal.SIGINT, signal_handler)
-def movement_loop(camera, raw_capture):
-    global chat_history
-    global visual_data
-    global mode
-    global frame
-    global stop_threads
-    global net
-    global output_layers
-    global classes
-
-    global camera_horizontal_pos
-    global camera_vertical_pos
-    global topics
-    ina219 = INA219(addr=0x42)
-    last_time = time.time()
-    while not stop_threads:
-
-
-        frame = capture_image(camera, raw_capture)
-        # Open the image file
-        img = frame
-        if img is None:
-            print("Image not found or unable to load. Check the path and try again.")
-
+        
+        img = cv2.imread('this_temp.jpg')
         height, width, channels = img.shape
 
        
@@ -822,11 +533,480 @@ def movement_loop(camera, raw_capture):
                 file.write(description + "\n")
 
         # Display and save the processed image
-        cv2.imshow('Image Window', img)
-        cv2.waitKey(2000)
-        cv2.destroyAllWindows()
+
         cv2.imwrite("output.jpg", img)
+    except Exception as e:
+        print(e)
+      
+def get_summary_prompt(yolo_stuff, the_time, percent, camera_vertical_pos, camera_horizontal_pos, current_distance, history, memories, base64_image):
+    with open('output.txt','r') as file:
+        yolo_stuff = file.read()
+    with open('visual.txt','r') as file:
+        gpt_visual_data = file.read()
+    
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+
+
+    this_prompt = 'Your response cannot be longer than a few sentences. The current time and date is: ' + str(the_time) + ' \n\n You are a 4 wheeled mobile robot that is fully controlled by ChatGPT (Specifically GPT-4o, so you have image and text input abilities). \n\n Your battery percent is at ' + format(percent, '.2f') + ' (Make sure you say something about your battery being low if it is below 30 percent and you havent already said something recently). \n\n Your camera that took the image where your yolo and other visual data is from is only a couple inches off the ground so make sure you adjust your mental perspective to compensate for the camera being so low to the ground (if it looks like you are more than a foot tall then you may be on top of something so be careful about ledges and other fall risks. Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos + '. Your ultrasonic sensor that detects the distance of whatever is in the center of the included image from the camera is giving a reading of ' + current_distance + ' centimeters away (It is always pointing the same direction as the camera). Here is the text description from YOLO for what the camera currently sees and the movements that would be necessary to center your camera on each specific object: \n\n'+str(yolo_stuff)+' \n\n And here is a general description of what your camera currently sees: '+gpt_visual_data+' \n\n Based on all of this data, make a summary of your current goals, aspirations, tasks, and just the whole situation and context so in the next prompt that is given your summary, it can figure out how to control the robot based on your recommendation (Your recommendation choices are Move Forward One Inch, Move Forward One Foot, Move Backward, Small Turn Left, Big Turn Left, Small Turn Right, Big Turn Right, Say Something, Look Up, Look Down, No Movement, End Conversation. You can only give the summary and a recommendation choice specifically from this list):\n\nCurrent Data History for this session (Oldest to newest): ' + '\n'.join(history) + ' \n\n Your current contextually relevant memories from actual past experiences that you have had (You have memories about other stuff too but its not relevant right now so they were not included in this prompt): ' + memories
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": this_prompt
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 300
+    }
+
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    summary_response = str(response.json()["choices"][0]["message"]["content"])
+    with open('summary.txt','w+') as file:
+        file.write(summary_response)
+    return summary_response
+      
+        
+
+def get_gtp_visual():
+
+
+    with open('this_temp.jpg', "rb") as image_file:
+        base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+
+
+    this_prompt = 'Please describe, from the image, objects and their positions, as well as the general environment and what is happening. Your response can be no longer than a few sentences within a paragraph formatting.'
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": this_prompt
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}"
+                        }
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 100
+    }
+  
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    summary_response = str(response.json()["choices"][0]["message"]["content"])
+    with open('visual.txt','w+') as file:
+        file.write(summary_response)
+
+
+
+def send_text_to_gpt4_move(history, topics, percent, current_distance):
+    global camera_horizontal_pos
+    global camera_vertical_pos
+    now = datetime.now()
+    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+    with open('output.txt','r') as file:
+        yolo_detections = file.read()
+    with open('visual.txt','r') as file:
+        gpt_visual_data = file.read()
+    print('Yolo Detections: \n'+str(yolo_detections))
+    print('GPT Visual Description: \n'+str(gpt_visual_data))
+    try:
+        with open('output.jpg', "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+    except:
+        with open('this_temp.jpg', "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')    
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    topic_index = 0
+    memories = 'No memories yet for any contextually relevant topics.'
+    while True:
+        try:
+            current_topic = topics[topic_index]
+            file = open('memories/'+current_topic + '.txt', 'r')
+            if topic_index == 0:
+                memories = file.read()
+            else:
+                memories = memories + ' \n\n ' + file.read()
+            file.close()
+            topic_index += 1
+            if topic_index >= len(topics):
+                break
+            else:
+                continue
+        except:
+            topic_index += 1
+            if topic_index >= len(topics):
+                break
+            else:
+                continue
+
+    current_distance = str(current_distance)
+    now = datetime.now()
+    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+
+    chat_history.append(str(the_time) + ' - Distance reading at this timestamp from the HCSR-04 sensor that measures the distance of any object that yolo detects is in the absolute middle center of the image (Distance in cm): ' + str(current_distance))
+    if int(current_distance) <= 25:
+        response_choices = 'Move Backward, Small Turn Left, Big Turn Left, Small Turn Right, Big Turn Right, Look Up, Look Down, No Movement, End Conversation. You are currently too close to an obstacle so you are not able to move forward. This would be a good time to look around with your camera and figure out which direction to move afterwards. Dont forget to put you camera back to down and center before moving.'
+    elif int(current_distance) <= 50 and int(current_distance) > 25:
+        response_choices = 'Move Forward One Inch, Move Backward, Small Turn Left, Big Turn Left, Small Turn Right, Big Turn Right, Look Up, Look Down, No Movement, End Conversation. You are currently very close to an obstacle. This would be a good time to look around with your camera and figure out which direction to move afterwards. Dont forget to put you camera back to down and center before moving.'
+    else:
+        response_choices = 'Move Forward One Inch, Move Forward One Foot, Move Backward, Small Turn Left, Big Turn Left, Small Turn Right, Big Turn Right, Look Up, Look Down, No Movement, End Conversation. Your camera must be Down and to the Center before you are allowed to choose to move forward.'
+    chat_history2 = history
+    while True:
+        if len(chat_history2) > 1000:
+            del chat_history2[0]
+            continue
+        else:
+            break
+    summary_from_gpt = get_summary_prompt(yolo_detections, the_time, percent, camera_vertical_pos, camera_horizontal_pos, current_distance, chat_history, memories, base64_image)
+    summary_prompt = 'You are a 4 wheeled mobile robot. Here is the last 1000 entries from the current chat history/robot internal workings history (it is all timestamped and in order from oldest to newest): '+'\n'.join(chat_history2)+' \n\n You also have a camera and an HCSR04 distance sensor pointing the same direction as the camera at whatever object that yolo says is in the absolute middle center of the image. Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos + '. Here is the text description from YOLO and the movements that would be necessary to center your camera on each specific object: \n\n '+str(yolo_detections)+ ' \n\n Here is a general visual description of what you currently see through you camera (this is in addition to YOLO data): '+gpt_visual_data+'. \n\n Here is the summary of the current situation at hand: '+summary_from_gpt+' \n\n You should most likely follow the recommendation made in this summary. \n\n Your response choices are: ' + response_choices + ' \n\n Your response choice Absolutely must be something from this list and worded EXACTLY THE SAME!!!!!!! If you dont use the exact words from this list of choices then your Response Choice will be incorrect, even if it seems contextually correct. My code needs the exact phrases word for word or it wont work. \n\nYour answer must be the Response Choice followed by ~~ with a space on each side, and then followed by your reasoning for your choice and then followed by ~~ with a space on each side and then followed by the topics that all of this data covers (you can only say the actual topics, dont preface label this section, literally only put the topics, each separated by a comma and space). \n\n On the previous prompt, you chose the topics of ' + str(topics) + ' so you can either stick with those, add or remove topics, or totally change the list. Your past memories are saved to topic files, so we use the current topics to know which files to open on the backend so your memories can be included in each prompt for context improvement. \n\n Also, if you want to move to an object, make sure you turn towards objects to center on it first before moving towards it, and if you dont see an object you are looking for then you should choose to turn moreso than to move forward. If no areas are drivable, then turn, because you turn in place like a tank so it is ok to turn if there are no drivable areas. \n\n If you feel like the list of current topics isnt correct, then provide a new list, but if the list of topics matches up to all of the convo and action history then return the unchanged list. \n\n Also, your response must be formatted perfectly and your Response Choice must be worded exactly the same as one of the options from the list of Response Choices. You absolutely must format your response correctly with how i mentioned the ~~ earlier. \n\n Prompt Example: Response Choice ~~ Reason for choice ~~ Topic list  \n\n You absolutely cannot put a preface label on your response (Like you cant start your response with Response Choice: .... you have to just say the choice). \n\n Also dont forget that moving forward or backward most likely wont bring things into view, but turning most likely will bring things into view, unless they are just not in the room you are in, in which case you would need to go explore around to find whatever you are trying to find. \n\n And as a last reminder, your response choice has to be worded exactly the same as your choices from the provided list, you must use the exact same words on your response choice.'
+    
+    
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": summary_prompt
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 100
+    }
+
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+ 
+    return str(response.json()["choices"][0]["message"]["content"])
+
+def send_text_to_gpt4_convo(history, text, vis_data):
+    global topics
+    topic_index = 0
+    memories = 'No memories yet for any contextually relevant topics.'
+    home_directory = os.path.expanduser('~')
+    filenames = [os.path.splitext(file)[0] for file in os.listdir(home_directory) if os.path.isfile(os.path.join(home_directory, file))]
+    filenames_string = ', '.join(filenames)
+    with open('output.txt','r') as file:
+        yolo_detections = file.read()
+    with open('visual.txt','r') as file:
+        gpt_visual_data = file.read()
+    now = datetime.now()
+    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+
+    topic_index = 0
+    memories = 'No memories yet for any contextually relevant topics.'
+
+    while True:
+        try:
+            current_topic = topics[topic_index]
+            file = open('memories/'+current_topic + '.txt', 'r')
+            if topic_index == 0:
+                memories = file.read()
+            else:
+                memories = memories + ' \n\n ' + file.read()
+            file.close()
+            topic_index += 1
+            if topic_index >= len(topics):
+                break
+            else:
+                continue
+        except:
+            topic_index += 1
+            if topic_index >= len(topics):
+                break
+            else:
+                continue
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    try:
+        with open('summary.txt','r') as file:
+            summary_response = file.read()
+    except:
+        summary_response = 'No summary yet'
+    with open('batt_per.txt','r') as file:
+        percent = file.read()
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are a 4 wheeled mobile raspberry pi and arduino robot that is fully controlled by ChatGPT (Specifically GPT4o). \n\n Your battery percent is: "+format(percent, '.1f')+" \n\n Here is chat history/robot internal workings history for this session (it is all timestamped and in order from oldest to newest): "+'\n'.join(history)+' \n\n Here is data from your memory from past conversations and experiences that is contextually relevant currently: '+memories+' \n\n The current time and date is: ' + str(the_time) + ' \n\n The current yolo Visual data from your camera and the movements that would be necessary to center your camera on each specific object: '+yolo_detections+' \n\n General description of what is currently seen in the camera image (This is in addition to the YOLO data): '+gpt_visual_data+' \n\n Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos + '. \n\nCurrent prompt (This is what you are actually responding to, while using all other data for context. Your response cannot be longer than a few sentences at max): ' + text
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 77
+    }
+
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    return response.json()["choices"][0]["message"]["content"]
+
+def get_summary(history, topics):
+    now = datetime.now()
+    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+    
+
+    topic_index = 0
+    memories = 'No memories yet for any contextually relevant topics.'
+
+    while True:
+        try:
+            current_topic = topics[topic_index]
+            file = open('memories/'+current_topic + '.txt', 'r')
+            if topic_index == 0:
+                memories = file.read()
+            else:
+                memories = memories + ' \n\n ' + file.read()
+            file.close()
+            topic_index += 1
+            if topic_index >= len(topics):
+                break
+            else:
+                continue
+        except:
+            topic_index += 1
+            if topic_index >= len(topics):
+                break
+            else:
+                continue
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    
+
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": '\n\nYou are a 4 wheeled mobile robot that is fully controlled by ChatGPT (Specifically GPT4o). Summarize this Movement, Chat, Sensor/Battery, and Visual Data History from the most recent conversation/event youve had (Oldest to newest): ' + str(history) + ' \n\n The summary should be, at most, 50% of the original length or the original data, if not shorter if it can be summarized accurately in an even shorter way. Make sure to include all important facts, events, goals, conversational information, learned information about the world, and any other data worth keeping in the robots memory so it has useful information to use on future prompts (The prompts that choose the robots actions and when to speak are given relevant topic memories so this summary has to include good relevant knowledge). These summaries are what becomes the robots memory that makes the robot more lifelike and grow and become an individual, so word it to where future when this stuff is included in the other prompts for controlling the robot, it will make sense to chatgpt who is being the brain of the robot.\n\nHeres contextually relevant memories that the robot already has that you can use as extra context when creating your summary of the history: \n\n' + memories
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 300
+    }
+
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    
+    return response.json()["choices"][0]["message"]["content"]
+
+def summarize_all_memories():
+    
+    memdex = 0
+    #get list of all memory file names
+    while True:
+        with open('memories/'+filenames[memdex]) as file:
+            current_memory = file.read()
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+        
+
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": '\n\nYou are a 4 wheeled mobile robot that is fully controlled by ChatGPT (Specifically GPT4o). \n\n Summarize this: ' + current_memory
+                        }
+                    ]
+                }
+            ],
+            "max_tokens": 1000
+        }
+
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+        memdex += 1
+        if memdex >= len(filenames):
+            break
+        else:
+            continue
+    
+
+def say_greeting(last_phrase):
+    global chat_history
+    global last_time
+    now = datetime.now()
+    try:
+        with open('visual.txt','r') as file:
+            visual = file.read()
+    except:
+        visual = 'no visual data yet'
+    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+    text = str(send_text_to_gpt4_convo(chat_history, last_phrase, visual))
+    chat_history.append('Time: ' + str(the_time) + ' - User Greeting: ' + last_phrase)  # add response to chat history
+    chat_history.append('Time: ' + str(the_time) + ' - AI Greeting: ' + text)  # add response to chat history
+    last_time = time.time()
+    wav_file = f"/home/ollie/Desktop/Robot/audio/speech_output.wav"
+
+    file = open('playback_text.txt', 'w+')
+    file.write(text)
+    file.close()
+    
+    return wav_file
+
+def get_last_phrase():
+
+    try:
+        with open('last_phrase.txt', 'r') as file:
+            last_phrase = file.read().strip().lower()
+        if last_phrase != '':
+            with open('last_phrase.txt', 'w') as file:
+                file.write('')  # Clear the content after reading
+            return last_phrase
+        else:
+            return ''
+    except Exception as e:
+        print(f"Error reading last phrase from file: {e}")
+        return ''
+# Load YOLOv4-tiny configuration and weights
+net = cv2.dnn.readNet("yolov4-tiny.cfg", "yolov4-tiny.weights")
+
+# Load COCO names
+with open("coco.names", "r") as f:
+    classes = [line.strip() for line in f.readlines()]
+
+layer_names = net.getLayerNames()
+# Adjust the index extraction to handle the nested array structure
+output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
+
+
+interrupted = False
+
+def signal_handler(signum, frame):
+    global interrupted
+    interrupted = True
+
+# Register the signal handler for SIGINT (Ctrl-C)
+signal.signal(signal.SIGINT, signal_handler)
+
+
+
+def convo_loop():
+    global chat_history
+    global stop_threads
+    global camera_horizontal_pos
+    global camera_vertical_pos
+    global topics
+    while not stop_threads:
+
+
+ 
+
+
+        try:
+            now = datetime.now()
+            the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+            last_phrase = get_last_phrase()
+            if last_phrase != '':
+                print('Prompt heard from microphone: ' + last_phrase)
+                last_time = time.time()
+                chat_history.append(str(the_time) + ' - Prompt heard from microphone at this timestamp: ' + last_phrase)
+                last_phrase = 'You just heard this prompt through your microphone: ' + last_phrase
+                with open('visual_data.txt','r') as file:
+                    visual = file.read()
+                speech_response = str(send_text_to_gpt4_convo(chat_history, last_phrase, visual)).replace('Response Choice: ','')
+                wav_file = f"/home/ollie/Desktop/Robot/audio/speech_output.wav"
+                file = open('playback_text.txt', 'w+')
+                file.write(speech_response)
+                file.close()
+                print('Response From GPT4: ' + speech_response)
+                chat_history.append('Time: ' + str(the_time) + ' - Speech Response From GPT4 at this timestamp: ' + speech_response)
+            else:
+                time.sleep(0.1)
+                continue
+              
+                
+        
+        except Exception as e:
+            print('convo loop outer error: ' + str(e))
+            print(traceback.format_exc())
+        time.sleep(0.1)
+
+        
+def movement_loop(camera, raw_capture):
+    global chat_history
+    global visual_data
+    global mode
+    global frame
+    global stop_threads
+    global net
+    global output_layers
+    global classes
+
+    global camera_horizontal_pos
+    global camera_vertical_pos
+    global topics
+    ina219 = INA219(addr=0x42)
+    last_time = time.time()
+    while not stop_threads:
+        with open('current_history.txt','w+') as file:
+            file.write('\n'.join(chat_history))
+
+        frame = capture_image(camera, raw_capture)
         cv2.imwrite('this_temp.jpg', frame)
+        # Open the image file
+        img = frame
+        if img is None:
+            print("Image not found or unable to load. Check the path and try again.")
+        try:
+            with open('this_temp.jpg', "rb") as image_file:
+                base64_image = base64.b64encode(image_file.read()).decode('utf-8') 
+        except:
+            time.sleep(1)
+            continue
+        #do yolo and gpt visual threads
+       
+        gpt_visual_thread = threading.Thread(target=get_gtp_visual)
+        yolo_thread = threading.Thread(target=yolo_detect)
+
+        gpt_visual_thread.start()
+        yolo_thread.start()
+        gpt_visual_thread.join()
+        yolo_thread.join()
         if mode == 'convo':
             current = ina219.getCurrent_mA() 
             bus_voltage = ina219.getBusVoltage_V()
@@ -834,11 +1014,11 @@ def movement_loop(camera, raw_capture):
             if per > 100: per = 100
             if per < 0: per = 0
             per = (per * 2) - 100
+            with open('batt_per.txt','w+') as file:
+                file.write(str(per))
             now = datetime.now()
             the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-            chat_history.append(str(the_time) + ' - Battery Percentage At This Timestamp: ' + str(per))
-            chat_history.append(str(the_time) + ' - At this timestamp, the camera was positioned ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos)
-
+    
             print("Percent:       {:3.1f}%".format(per))
             if current > 0.0 or per < 15.0 or interrupted:
                 stop_threads = True
@@ -851,7 +1031,7 @@ def movement_loop(camera, raw_capture):
                         
                         now = datetime.now()
                         the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                        file = open(current_topic + '.txt', 'a+')
+                        file = open('memories/'+current_topic + '.txt', 'a+')
                         file.write('\n\n Convo and Action Summary from ' + the_time + ':\n\n' + summary)
                         file.close()
                         topic_index += 1
@@ -876,14 +1056,7 @@ def movement_loop(camera, raw_capture):
                 if frame is not None:
                     now = datetime.now()
                     the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                    last_phrase = get_last_phrase()
-                    if last_phrase != '':
-                        print('Phrase heard from microphone: ' + last_phrase)
-                        last_time = time.time()
-                        chat_history.append(str(the_time) + ' - Phrase heard from microphone at this timestamp: ' + last_phrase)
-                        last_phrase = 'You just heard these words through your microphone so this is the main part of the prompt currently (So make sure you respond accordingly, aka you should most likely Say Something): ' + last_phrase
-                    else:
-                        last_phrase = 'You have not heard any words recently through your microphone that you havent already responded to so use all the data in this prompt as the main data.'
+
                     while True:
                         try:
                             distance = int(read_distance_from_arduino())
@@ -892,34 +1065,23 @@ def movement_loop(camera, raw_capture):
                         except:
                             time.sleep(0.1)
                             continue
-                    movement_response = str(send_text_to_gpt4_move(last_phrase, chat_history, topics, per, distance)).replace('Response Choice: ','')
-                    chat_history.append('Time: ' + str(the_time) + ' - Visual Data of what is to the '+camera_horizontal_pos+' as Seen From the Camera while the camera is turned that direction: ' + movement_response.split(' ~~ ')[2])
+                    print('Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos)
+                    movement_response = str(send_text_to_gpt4_move(chat_history, topics, per, distance)).replace('Response Choice: ','')
                     try:
                         print('Response Choice: '+ movement_response.split(' ~~ ')[0].strip())
-                        visual_data = movement_response.split(' ~~ ')[2]
+                        print('Reasoning: '+ movement_response.split(' ~~ ')[1].strip())
                         last_topics = topics
                         
-                        print('Visual Data: ' + visual_data)
-                        topics = movement_response.split(' ~~ ')[3].strip().split(', ')
+                        topics = movement_response.split(' ~~ ')[2].strip().split(', ')
                         print('Topics: ' + str(topics))
-                        if movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'saysomething':
-                            wav_file = f"/home/ollie/Desktop/Robot/audio/speech_output.wav"
-                            file = open('playback_text.txt', 'w+')
-                            file.write(movement_response.split(' ~~ ')[1].replace('~~', ''))
-                            file.close()
-                            print('Speech From GPT: ' + movement_response.split(' ~~ ')[1].replace('~~', ''))
-                            chat_history.append('Time: ' + str(the_time) + ' - Speech Response From GPT4 at this timestamp: ' + movement_response.split(' ~~ ')[1])
-                        else:
-                            print('Reasoning for Choice: ' + movement_response.split(' ~~ ')[1].replace('~~', ''))
-                            chat_history.append('Time: ' + str(the_time) + ' - Movement Choice at this timestamp: ' + movement_response.split(' ~~ ')[0])  # add response to chat history
-                            chat_history.append('Time: ' + str(the_time) + ' - Reasoning For This Movement Choice: ' + movement_response.split(' ~~ ')[1])
+                        chat_history.append('Time: ' + str(the_time) + ' - Movement Choice at this timestamp: ' + movement_response.split(' ~~ ')[0])  # add response to chat history
+                        chat_history.append('Time: ' + str(the_time) + ' - Reasoning For This Movement Choice: ' + movement_response.split(' ~~ ')[1])
                     except:
                         pass
                     
-                    print('movement_response.split(' ~~ ')[1]
                     now = datetime.now()
                     the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                    print('Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos)
+                    
                     if movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforward1inch' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforwardoneinch':
                         if camera_horizontal_pos != 'center' or camera_vertical_pos != 'down':
                             print('move failed. not looking down and center')
@@ -930,6 +1092,7 @@ def movement_loop(camera, raw_capture):
                             send_data_to_arduino(["x"], arduino_address)
                     elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforward1foot' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforwardonefoot':
                         if camera_horizontal_pos != 'center' or camera_vertical_pos != 'down':
+                            print('Move Failed. Not looking down and center')
                             chat_history.append('Time: ' + str(the_time) + ' - Move Forward 1 Foot Failed: Camera Must Be Centered and Down before moving forward')
                         else:
                             send_data_to_arduino(["w"], arduino_address)
@@ -957,33 +1120,40 @@ def movement_loop(camera, raw_capture):
                         send_data_to_arduino(["x"], arduino_address)
                     elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookup':
                         if camera_horizontal_pos != 'center':
+                            print('Look Up Failed. Camera not centered')
                             chat_history.append('Time: ' + str(the_time) + ' - Look Up Failed: Camera Must Be Centered Before Looking Up')
                         elif camera_vertical_pos == 'up':
                             chat_history.append('Time: ' + str(the_time) + ' - Look Up Failed: Camera Is Already Looking Up')
+                            print('Look Up Failed. Already looking up')
                         else:
                             send_data_to_arduino(["2"], arduino_address)
                             time.sleep(1.5)
                             camera_vertical_pos = 'up'
                     elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookleft':
                         if camera_vertical_pos != 'down':
-                            chat_history.append('Time: ' + str(the_time) + ' - Turn Camera Left Failed: Camera Must Be Down Before Looking Left')
+                            print('Look left failed. Camera not down')
+                            chat_history.append('Time: ' + str(the_time) + ' - Look Left Failed: Camera Must Be Down Before Looking Left')
                         elif camera_horizontal_pos == 'left':
-                            chat_history.append('Time: ' + str(the_time) + ' - Turn Camera Left Failed: Camera Is Already Looking Left')
+                            print('Look left failed. Already looking left')
+                            chat_history.append('Time: ' + str(the_time) + ' - Look Left Failed: Camera Is Already Looking Left')
                         else:
                             send_data_to_arduino(["3"], arduino_address)
                             time.sleep(1.5)
                             camera_horizontal_pos = 'left'
                     elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookright':
                         if camera_vertical_pos != 'down':
-                            chat_history.append('Time: ' + str(the_time) + ' - Turn Camera Right Failed: Camera Must Be Down Before Looking Right')
+                            print('Look right failed. Camera not down')
+                            chat_history.append('Time: ' + str(the_time) + ' - Look Right Failed: Camera Must Be Down Before Looking Right')
                         elif camera_horizontal_pos == 'right':
-                            chat_history.append('Time: ' + str(the_time) + ' - Turn Camera Right Failed: Camera Is Already Looking Right')
+                            print('Look right failed. Already looking right')
+                            chat_history.append('Time: ' + str(the_time) + ' - Look Right Failed: Camera Is Already Looking Right')
                         else:
                             send_data_to_arduino(["5"], arduino_address)
                             time.sleep(1.5)
                             camera_horizontal_pos = 'right'
                     elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookcenter':
                         if camera_horizontal_pos == 'center':
+                            print('Look center failed. Already looking center')
                             chat_history.append('Time: ' + str(the_time) + ' - Turn Camera Center Failed: Camera Is Already Looking Center')
                         else:
                             send_data_to_arduino(["4"], arduino_address)
@@ -992,6 +1162,7 @@ def movement_loop(camera, raw_capture):
                     elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookdown':
                         if camera_vertical_pos == 'down':
                             chat_history.append('Time: ' + str(the_time) + ' - Look Down Failed: Camera Is Already Looking Down')
+                            print('Look Down failed. Already looking down')
                         else:
                             send_data_to_arduino(["1"], arduino_address)
                             time.sleep(1.5)
@@ -1007,7 +1178,7 @@ def movement_loop(camera, raw_capture):
                     
                                 now = datetime.now()
                                 the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                                file = open(current_topic + '.txt', 'a+')
+                                file = open('memories/'+current_topic + '.txt', 'a+')
                                 file.write('\n\n Convo and Action Summary from ' + the_time + ':\n\n' + summary)
                                 file.close()
                                 topic_index += 1
@@ -1030,11 +1201,38 @@ def movement_loop(camera, raw_capture):
                     else:
                         now = datetime.now()
                         the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                        chat_history.append('Time: ' + str(the_time) + ' - Response failed. Most likely formatted or worded improperly. Here is what you responded with so dont do it like this: ' + movement_response)
+                        chat_history.append('Time: ' + str(the_time) + ' - Response failed. Did not choose an actual Response Choice from the list. Here is what you responded with so dont do it again: ' + movement_response)
                     
                     
                     
                     if topics != last_topics:
+                        
+                        last_time = time.time()
+                        summary = get_summary(chat_history, last_topics)
+                        topic_index = 0
+                        while True:
+                            try:
+                                current_topic = last_topics[topic_index]
+                                
+                                now = datetime.now()
+                                the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+                                file = open('memories/'+current_topic + '.txt', 'a+')
+                                file.write('\n\n Convo and Action Summary from ' + the_time + ':\n\n' + summary)
+                                file.close()
+                                topic_index += 1
+                                if topic_index >= len(last_topics):
+                                    break
+                                else:
+                                    continue
+                            except:
+                                topic_index += 1
+                                if topic_index >= len(last_topics):
+                                    break
+                                else:
+                                    continue
+                    
+                        
+                        
                         home_directory = os.path.expanduser('~')
                         filenames = [os.path.splitext(file)[0] for file in os.listdir(home_directory) if os.path.isfile(os.path.join(home_directory, file))]
                         filenames_string = ', '.join(filenames)
@@ -1087,21 +1285,40 @@ if __name__ == "__main__":
                 if name_heard == True:
 
                     print("Name heard, initializing...")
+                    #do yolo and gpt visual threads
+
+                    gpt_visual_thread = threading.Thread(target=get_gtp_visual)
+                    yolo_thread = threading.Thread(target=yolo_detect)
+
+                    
+                   
+
+
+                    gpt_visual_thread.start()
+                    yolo_thread.start()
+                    gpt_visual_thread.join()
+                    yolo_thread.join()
+                    print('Saying Greeting')
+                    with open('last_phrase.txt', 'w') as file:
+                        file.write('')
                     say_greeting(last_phrase)
                     human_detected = True
                     now = datetime.now()
                     the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                    chat_history.append('Time: ' + str(the_time) + ' - User Greeting: ' + last_phrase)
-                    with open('last_phrase.txt', 'w') as file:
-                        file.write('')
+
                 else:
                     pass
                 time.sleep(0.1)
 
             movement_thread = threading.Thread(target=movement_loop, args=(camera, raw_capture))
+            convo_thread = threading.Thread(target=convo_loop)
+
             movement_thread.start()
+            convo_thread.start()
             movement_thread.join()
+            convo_thread.join()
     except Exception as e:
+        print(traceback.format_exc())
         print(f"An error occurred: {e}")
     finally:
         camera.close()
