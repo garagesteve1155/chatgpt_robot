@@ -983,273 +983,276 @@ def movement_loop(camera, raw_capture):
     ina219 = INA219(addr=0x42)
     last_time = time.time()
     while not stop_threads:
-        with open('current_history.txt','w+') as file:
-            file.write('\n'.join(chat_history))
-
-        frame = capture_image(camera, raw_capture)
-        cv2.imwrite('this_temp.jpg', frame)
-        # Open the image file
-        img = frame
-        if img is None:
-            print("Image not found or unable to load. Check the path and try again.")
         try:
-            with open('this_temp.jpg', "rb") as image_file:
-                base64_image = base64.b64encode(image_file.read()).decode('utf-8') 
-        except:
-            time.sleep(1)
-            continue
-        #do yolo and gpt visual threads
-       
-        gpt_visual_thread = threading.Thread(target=get_gtp_visual)
-        yolo_thread = threading.Thread(target=yolo_detect)
+            with open('current_history.txt','w+') as file:
+                file.write('\n'.join(chat_history))
 
-        gpt_visual_thread.start()
-        yolo_thread.start()
-        gpt_visual_thread.join()
-        yolo_thread.join()
-        if mode == 'convo':
-            current = ina219.getCurrent_mA() 
-            bus_voltage = ina219.getBusVoltage_V()
-            per = (bus_voltage - 6) / 2.4 * 100
-            if per > 100: per = 100
-            if per < 0: per = 0
-            per = (per * 2) - 100
-            with open('batt_per.txt','w+') as file:
-                file.write(str(per))
-            now = datetime.now()
-            the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-    
-            print("Percent:       {:3.1f}%".format(per))
-            if current > 0.0 or per < 15.0 or interrupted:
-                stop_threads = True
-                last_time = time.time()
-                summary = get_summary(chat_history, topics)
-                topic_index = 0
-                while True:
-                    try:
-                        current_topic = topics[topic_index]
-                        
-                        now = datetime.now()
-                        the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                        file = open('memories/'+current_topic + '.txt', 'a+')
-                        file.write('\n\n Convo and Action Summary from ' + the_time + ':\n\n' + summary)
-                        file.close()
-                        topic_index += 1
-                        if topic_index >= len(topics):
-                            break
-                        else:
-                            continue
-                    except:
-                        topic_index += 1
-                        if topic_index >= len(topics):
-                            break
-                        else:
-                            continue
-                print('ending convo')
-                chat_history = []
-                if interrupted:
-                    print("Exiting due to Ctrl-C")
-                    os._exit(0)
-            else:
-                pass
+            frame = capture_image(camera, raw_capture)
+            cv2.imwrite('this_temp.jpg', frame)
+            # Open the image file
+            img = frame
+            if img is None:
+                print("Image not found or unable to load. Check the path and try again.")
             try:
-                if frame is not None:
-                    now = datetime.now()
-                    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+                with open('this_temp.jpg', "rb") as image_file:
+                    base64_image = base64.b64encode(image_file.read()).decode('utf-8') 
+            except:
+                time.sleep(1)
+                continue
+            #do yolo and gpt visual threads
+           
+            gpt_visual_thread = threading.Thread(target=get_gtp_visual)
+            yolo_thread = threading.Thread(target=yolo_detect)
 
+            gpt_visual_thread.start()
+            yolo_thread.start()
+            gpt_visual_thread.join()
+            yolo_thread.join()
+            if mode == 'convo':
+                current = ina219.getCurrent_mA() 
+                bus_voltage = ina219.getBusVoltage_V()
+                per = (bus_voltage - 6) / 2.4 * 100
+                if per > 100: per = 100
+                if per < 0: per = 0
+                per = (per * 2) - 100
+                with open('batt_per.txt','w+') as file:
+                    file.write(str(per))
+                now = datetime.now()
+                the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+        
+                print("Percent:       {:3.1f}%".format(per))
+                if current > 0.0 or per < 15.0 or interrupted:
+                    stop_threads = True
+                    last_time = time.time()
+                    summary = get_summary(chat_history, topics)
+                    topic_index = 0
                     while True:
                         try:
-                            distance = int(read_distance_from_arduino())
-                            print('Current Distance: ' + str(distance) + ' cm')
-                            break
+                            current_topic = topics[topic_index]
+                            
+                            now = datetime.now()
+                            the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+                            file = open('memories/'+current_topic + '.txt', 'a+')
+                            file.write('\n\n Convo and Action Summary from ' + the_time + ':\n\n' + summary)
+                            file.close()
+                            topic_index += 1
+                            if topic_index >= len(topics):
+                                break
+                            else:
+                                continue
                         except:
-                            time.sleep(0.1)
-                            continue
-                    print('Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos)
-                    movement_response = str(send_text_to_gpt4_move(chat_history, topics, per, distance)).replace('Response Choice: ','')
-                    try:
-                        print('Response Choice: '+ movement_response.split(' ~~ ')[0].strip())
-                        print('Reasoning: '+ movement_response.split(' ~~ ')[1].strip())
-                        last_topics = topics
+                            topic_index += 1
+                            if topic_index >= len(topics):
+                                break
+                            else:
+                                continue
+                    print('ending convo')
+                    chat_history = []
+                    if interrupted:
+                        print("Exiting due to Ctrl-C")
+                        os._exit(0)
+                else:
+                    pass
+                try:
+                    if frame is not None:
+                        now = datetime.now()
+                        the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+
+                        while True:
+                            try:
+                                distance = int(read_distance_from_arduino())
+                                print('Current Distance: ' + str(distance) + ' cm')
+                                break
+                            except:
+                                time.sleep(0.1)
+                                continue
+                        print('Your camera is currently pointed ' + camera_vertical_pos + ' and to the ' + camera_horizontal_pos)
+                        movement_response = str(send_text_to_gpt4_move(chat_history, topics, per, distance)).replace('Response Choice: ','')
+                        try:
+                            print('Response Choice: '+ movement_response.split(' ~~ ')[0].strip())
+                            print('Reasoning: '+ movement_response.split(' ~~ ')[1].strip())
+                            last_topics = topics
+                            
+                            topics = movement_response.split(' ~~ ')[2].strip().split(', ')
+                            print('Topics: ' + str(topics))
+                            chat_history.append('Time: ' + str(the_time) + ' - Movement Choice at this timestamp: ' + movement_response.split(' ~~ ')[0])  # add response to chat history
+                            chat_history.append('Time: ' + str(the_time) + ' - Reasoning For This Movement Choice: ' + movement_response.split(' ~~ ')[1])
+                        except:
+                            pass
                         
-                        topics = movement_response.split(' ~~ ')[2].strip().split(', ')
-                        print('Topics: ' + str(topics))
-                        chat_history.append('Time: ' + str(the_time) + ' - Movement Choice at this timestamp: ' + movement_response.split(' ~~ ')[0])  # add response to chat history
-                        chat_history.append('Time: ' + str(the_time) + ' - Reasoning For This Movement Choice: ' + movement_response.split(' ~~ ')[1])
-                    except:
-                        pass
-                    
-                    now = datetime.now()
-                    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                    
-                    if movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforward1inch' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforwardoneinch':
-                        if camera_horizontal_pos != 'center' or camera_vertical_pos != 'down':
-                            print('move failed. not looking down and center')
-                            chat_history.append('Time: ' + str(the_time) + ' - Move Forward 1 Inch Failed: Camera Must Be Centered and Down before moving forward')
-                        else:
-                            send_data_to_arduino(["w"], arduino_address)
-                            time.sleep(0.1)
+                        now = datetime.now()
+                        the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+                        
+                        if movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforward1inch' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforwardoneinch':
+                            if camera_horizontal_pos != 'center' or camera_vertical_pos != 'down':
+                                print('move failed. not looking down and center')
+                                chat_history.append('Time: ' + str(the_time) + ' - Move Forward 1 Inch Failed: Camera Must Be Centered and Down before moving forward')
+                            else:
+                                send_data_to_arduino(["w"], arduino_address)
+                                time.sleep(0.1)
+                                send_data_to_arduino(["x"], arduino_address)
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforward1foot' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforwardonefoot':
+                            if camera_horizontal_pos != 'center' or camera_vertical_pos != 'down':
+                                print('Move Failed. Not looking down and center')
+                                chat_history.append('Time: ' + str(the_time) + ' - Move Forward 1 Foot Failed: Camera Must Be Centered and Down before moving forward')
+                            else:
+                                send_data_to_arduino(["w"], arduino_address)
+                                time.sleep(0.3)
+                                send_data_to_arduino(["x"], arduino_address)
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'movebackward':
+                            send_data_to_arduino(["s"], arduino_address)
+                            time.sleep(0.2)
                             send_data_to_arduino(["x"], arduino_address)
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforward1foot' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'moveforwardonefoot':
-                        if camera_horizontal_pos != 'center' or camera_vertical_pos != 'down':
-                            print('Move Failed. Not looking down and center')
-                            chat_history.append('Time: ' + str(the_time) + ' - Move Forward 1 Foot Failed: Camera Must Be Centered and Down before moving forward')
-                        else:
-                            send_data_to_arduino(["w"], arduino_address)
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'bigturnleft' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'movebigturnleft':
+                            send_data_to_arduino(["a"], arduino_address)
                             time.sleep(0.3)
                             send_data_to_arduino(["x"], arduino_address)
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'movebackward':
-                        send_data_to_arduino(["s"], arduino_address)
-                        time.sleep(0.2)
-                        send_data_to_arduino(["x"], arduino_address)
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'bigturnleft' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'movebigturnleft':
-                        send_data_to_arduino(["a"], arduino_address)
-                        time.sleep(0.3)
-                        send_data_to_arduino(["x"], arduino_address)
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'smallturnleft' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'movesmallturnleft':
-                        send_data_to_arduino(["a"], arduino_address)
-                        time.sleep(0.1)
-                        send_data_to_arduino(["x"], arduino_address)
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'bigturnright' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'movebigturnright':
-                        send_data_to_arduino(["d"], arduino_address)
-                        time.sleep(0.3)
-                        send_data_to_arduino(["x"], arduino_address)
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'smallturnright' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'movesmallturnright':
-                        send_data_to_arduino(["d"], arduino_address)
-                        time.sleep(0.1)
-                        send_data_to_arduino(["x"], arduino_address)
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookup':
-                        if camera_horizontal_pos != 'center':
-                            print('Look Up Failed. Camera not centered')
-                            chat_history.append('Time: ' + str(the_time) + ' - Look Up Failed: Camera Must Be Centered Before Looking Up')
-                        elif camera_vertical_pos == 'up':
-                            chat_history.append('Time: ' + str(the_time) + ' - Look Up Failed: Camera Is Already Looking Up')
-                            print('Look Up Failed. Already looking up')
-                        else:
-                            send_data_to_arduino(["2"], arduino_address)
-                            time.sleep(1.5)
-                            camera_vertical_pos = 'up'
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookleft':
-                        if camera_vertical_pos != 'down':
-                            print('Look left failed. Camera not down')
-                            chat_history.append('Time: ' + str(the_time) + ' - Look Left Failed: Camera Must Be Down Before Looking Left')
-                        elif camera_horizontal_pos == 'left':
-                            print('Look left failed. Already looking left')
-                            chat_history.append('Time: ' + str(the_time) + ' - Look Left Failed: Camera Is Already Looking Left')
-                        else:
-                            send_data_to_arduino(["3"], arduino_address)
-                            time.sleep(1.5)
-                            camera_horizontal_pos = 'left'
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookright':
-                        if camera_vertical_pos != 'down':
-                            print('Look right failed. Camera not down')
-                            chat_history.append('Time: ' + str(the_time) + ' - Look Right Failed: Camera Must Be Down Before Looking Right')
-                        elif camera_horizontal_pos == 'right':
-                            print('Look right failed. Already looking right')
-                            chat_history.append('Time: ' + str(the_time) + ' - Look Right Failed: Camera Is Already Looking Right')
-                        else:
-                            send_data_to_arduino(["5"], arduino_address)
-                            time.sleep(1.5)
-                            camera_horizontal_pos = 'right'
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookcenter':
-                        if camera_horizontal_pos == 'center':
-                            print('Look center failed. Already looking center')
-                            chat_history.append('Time: ' + str(the_time) + ' - Turn Camera Center Failed: Camera Is Already Looking Center')
-                        else:
-                            send_data_to_arduino(["4"], arduino_address)
-                            time.sleep(1.5)
-                            camera_horizontal_pos = 'center'
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookdown':
-                        if camera_vertical_pos == 'down':
-                            chat_history.append('Time: ' + str(the_time) + ' - Look Down Failed: Camera Is Already Looking Down')
-                            print('Look Down failed. Already looking down')
-                        else:
-                            send_data_to_arduino(["1"], arduino_address)
-                            time.sleep(1.5)
-                            camera_vertical_pos = 'down'  
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'endconversation':
-                        stop_threads = True
-                        last_time = time.time()
-                        summary = get_summary(chat_history, topics)
-                        topic_index = 0
-                        while True:
-                            try:
-                                current_topic = topics[topic_index]
-                    
-                                now = datetime.now()
-                                the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                                file = open('memories/'+current_topic + '.txt', 'a+')
-                                file.write('\n\n Convo and Action Summary from ' + the_time + ':\n\n' + summary)
-                                file.close()
-                                topic_index += 1
-                                if topic_index >= len(topics):
-                                    break
-                                else:
-                                    continue
-                            except:
-                                topic_index += 1
-                                if topic_index >= len(topics):
-                                    break
-                                else:
-                                    continue
-                        print('ending convo')
-                        chat_history = []
-                    elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'nomovement':
-                        now = datetime.now()
-                        the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                        chat_history.append('Time: ' + str(the_time) + ' - Response choice was No Movement so not moving.')
-                    else:
-                        now = datetime.now()
-                        the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                        chat_history.append('Time: ' + str(the_time) + ' - Response failed. Did not choose an actual Response Choice from the list. Here is what you responded with so dont do it again: ' + movement_response)
-                    
-                    
-                    
-                    if topics != last_topics:
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'smallturnleft' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'movesmallturnleft':
+                            send_data_to_arduino(["a"], arduino_address)
+                            time.sleep(0.1)
+                            send_data_to_arduino(["x"], arduino_address)
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'bigturnright' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'movebigturnright':
+                            send_data_to_arduino(["d"], arduino_address)
+                            time.sleep(0.3)
+                            send_data_to_arduino(["x"], arduino_address)
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'smallturnright' or movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'movesmallturnright':
+                            send_data_to_arduino(["d"], arduino_address)
+                            time.sleep(0.1)
+                            send_data_to_arduino(["x"], arduino_address)
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookup':
+                            if camera_horizontal_pos != 'center':
+                                print('Look Up Failed. Camera not centered')
+                                chat_history.append('Time: ' + str(the_time) + ' - Look Up Failed: Camera Must Be Centered Before Looking Up')
+                            elif camera_vertical_pos == 'up':
+                                chat_history.append('Time: ' + str(the_time) + ' - Look Up Failed: Camera Is Already Looking Up')
+                                print('Look Up Failed. Already looking up')
+                            else:
+                                send_data_to_arduino(["2"], arduino_address)
+                                time.sleep(1.5)
+                                camera_vertical_pos = 'up'
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookleft':
+                            if camera_vertical_pos != 'down':
+                                print('Look left failed. Camera not down')
+                                chat_history.append('Time: ' + str(the_time) + ' - Look Left Failed: Camera Must Be Down Before Looking Left')
+                            elif camera_horizontal_pos == 'left':
+                                print('Look left failed. Already looking left')
+                                chat_history.append('Time: ' + str(the_time) + ' - Look Left Failed: Camera Is Already Looking Left')
+                            else:
+                                send_data_to_arduino(["3"], arduino_address)
+                                time.sleep(1.5)
+                                camera_horizontal_pos = 'left'
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookright':
+                            if camera_vertical_pos != 'down':
+                                print('Look right failed. Camera not down')
+                                chat_history.append('Time: ' + str(the_time) + ' - Look Right Failed: Camera Must Be Down Before Looking Right')
+                            elif camera_horizontal_pos == 'right':
+                                print('Look right failed. Already looking right')
+                                chat_history.append('Time: ' + str(the_time) + ' - Look Right Failed: Camera Is Already Looking Right')
+                            else:
+                                send_data_to_arduino(["5"], arduino_address)
+                                time.sleep(1.5)
+                                camera_horizontal_pos = 'right'
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookcenter':
+                            if camera_horizontal_pos == 'center':
+                                print('Look center failed. Already looking center')
+                                chat_history.append('Time: ' + str(the_time) + ' - Turn Camera Center Failed: Camera Is Already Looking Center')
+                            else:
+                                send_data_to_arduino(["4"], arduino_address)
+                                time.sleep(1.5)
+                                camera_horizontal_pos = 'center'
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'lookdown':
+                            if camera_vertical_pos == 'down':
+                                chat_history.append('Time: ' + str(the_time) + ' - Look Down Failed: Camera Is Already Looking Down')
+                                print('Look Down failed. Already looking down')
+                            else:
+                                send_data_to_arduino(["1"], arduino_address)
+                                time.sleep(1.5)
+                                camera_vertical_pos = 'down'  
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'endconversation':
+                            stop_threads = True
+                            last_time = time.time()
+                            summary = get_summary(chat_history, topics)
+                            topic_index = 0
+                            while True:
+                                try:
+                                    current_topic = topics[topic_index]
                         
-                        last_time = time.time()
-                        summary = get_summary(chat_history, last_topics)
-                        topic_index = 0
-                        while True:
-                            try:
-                                current_topic = last_topics[topic_index]
-                                
-                                now = datetime.now()
-                                the_time = now.strftime("%d/%m/%Y %H:%M:%S")
-                                file = open('memories/'+current_topic + '.txt', 'a+')
-                                file.write('\n\n Convo and Action Summary from ' + the_time + ':\n\n' + summary)
-                                file.close()
-                                topic_index += 1
-                                if topic_index >= len(last_topics):
-                                    break
-                                else:
-                                    continue
-                            except:
-                                topic_index += 1
-                                if topic_index >= len(last_topics):
-                                    break
-                                else:
-                                    continue
-                    
+                                    now = datetime.now()
+                                    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+                                    file = open('memories/'+current_topic + '.txt', 'a+')
+                                    file.write('\n\n Convo and Action Summary from ' + the_time + ':\n\n' + summary)
+                                    file.close()
+                                    topic_index += 1
+                                    if topic_index >= len(topics):
+                                        break
+                                    else:
+                                        continue
+                                except:
+                                    topic_index += 1
+                                    if topic_index >= len(topics):
+                                        break
+                                    else:
+                                        continue
+                            print('ending convo')
+                            chat_history = []
+                        elif movement_response.split(' ~~ ')[0].strip().lower().replace(' ', '') == 'nomovement':
+                            now = datetime.now()
+                            the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+                            chat_history.append('Time: ' + str(the_time) + ' - Response choice was No Movement so not moving.')
+                        else:
+                            now = datetime.now()
+                            the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+                            chat_history.append('Time: ' + str(the_time) + ' - Response failed. Did not choose an actual Response Choice from the list. Here is what you responded with so dont do it again: ' + movement_response)
                         
                         
-                        home_directory = os.path.expanduser('~')
-                        filenames = [os.path.splitext(file)[0] for file in os.listdir(home_directory) if os.path.isfile(os.path.join(home_directory, file))]
-                        filenames_string = ', '.join(filenames)
+                        
+                        if topics != last_topics:
+                            
+                            last_time = time.time()
+                            summary = get_summary(chat_history, last_topics)
+                            topic_index = 0
+                            while True:
+                                try:
+                                    current_topic = last_topics[topic_index]
+                                    
+                                    now = datetime.now()
+                                    the_time = now.strftime("%d/%m/%Y %H:%M:%S")
+                                    file = open('memories/'+current_topic + '.txt', 'a+')
+                                    file.write('\n\n Convo and Action Summary from ' + the_time + ':\n\n' + summary)
+                                    file.close()
+                                    topic_index += 1
+                                    if topic_index >= len(last_topics):
+                                        break
+                                    else:
+                                        continue
+                                except:
+                                    topic_index += 1
+                                    if topic_index >= len(last_topics):
+                                        break
+                                    else:
+                                        continue
+                        
+                            
+                            
+                            home_directory = os.path.expanduser('~')
+                            filenames = [os.path.splitext(file)[0] for file in os.listdir(home_directory) if os.path.isfile(os.path.join(home_directory, file))]
+                            filenames_string = ', '.join(filenames)
 
-                        all_topics = get_topics(topics, filenames_string)
-                        topics = all_topics.split(', ')
-                        print('Updated topics: '+str(topics))
-                    else:
-                        pass
-                    
+                            all_topics = get_topics(topics, filenames_string)
+                            topics = all_topics.split(', ')
+                            print('Updated topics: '+str(topics))
+                        else:
+                            pass
+                        
+                
+                except Exception as e:
+                    print(e)
+            else:
+                pass
             
-            except Exception as e:
-                print(e)
-        else:
-            pass
+        except:
+            print(traceback.format_exc())
         time.sleep(0.1)
-
 if __name__ == "__main__":
     try:
         transcribe_thread = threading.Thread(target=listen_and_transcribe)  # Adding the transcription thread
