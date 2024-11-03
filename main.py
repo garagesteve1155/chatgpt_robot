@@ -1,6 +1,4 @@
 import re
-import pyaudio
-import speech_recognition as sr
 import subprocess
 import os
 import webrtcvad
@@ -19,12 +17,17 @@ import signal
 import traceback
 import random
 from queue import Queue
+from vosk import Model, KaldiRecognizer
+import pyaudio
+import json
 
+# Initialize Vosk model and recognizer
+vosk_model = Model("/path/to/vosk-model")
+recognizer = KaldiRecognizer(vosk_model, RATE)
 # Create a queue to share the boxes and class IDs between threads
 yolo_data_queue = Queue()
 
 # Initialize the recognizer and VAD with the highest aggressiveness setting
-r = sr.Recognizer()
 vad = webrtcvad.Vad(3)  # Highest sensitivity
 print("Initialized recognizer and VAD.")
 # Audio stream parameters
@@ -499,51 +502,31 @@ def listen_and_transcribe():
     global is_transcribing
     stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
     print("Audio stream opened for transcription.")
-    speech_frames = []
-    non_speech_count = 0
-    post_speech_buffer = 30
-    speech_count = 0
+
     while True:
-        if speech_count == 0:
-            #check self_response file
-            with open('self_response.txt','r') as f:
-                self_response = f.read()
-            if self_response != '':
-                with open('playback_text.txt', 'w') as f:
-                    f.write(self_response)
-                file = open('self_response.txt', 'w+')
-                file.close()
+        if not is_transcribing:  # Only transcribe when not playing back text
+            # Read audio chunk
+            audio_data = stream.read(CHUNK, exception_on_overflow=False)
+            
+            # Perform real-time transcription
+            if recognizer.AcceptWaveform(audio_data):
+                result = recognizer.Result()  # Final result
+                text = json.loads(result).get("text", "").strip()
+                
+                # Save transcription to last_phrase file if text is present
+                if text:
+                    with open('last_phrase.txt', 'w') as file:
+                        file.write(text)
+                    print("Transcribed:", text)
             else:
-                pass
-            #if data, add data to playback text file
-        else:
-            pass
-        if handle_playback(stream):
+                # For partial results (if you want to log them or use for debugging)
+                partial_result = recognizer.PartialResult()
+                print("Partial result:", json.loads(partial_result).get("partial", ""))
+
+        if handle_playback(stream):  # Pauses transcription during playback
             continue
-        else:
-            pass
 
-        if not is_transcribing:
-            frame = stream.read(CHUNK, exception_on_overflow=False)
-            frame = filter_low_volume(frame)
-            is_speech = vad.is_speech(frame, RATE)
-            speech_frames.append(frame)
-            if is_speech:
-                non_speech_count = 0
-                speech_count += 1
-            else:
-                non_speech_count += 1
-                if non_speech_count > post_speech_buffer:
-                    if speech_count >= 30 and not is_transcribing:
-                        process_audio_data(speech_frames, r, SAMPLE_WIDTH)
-                        speech_frames = []
-                        non_speech_count = 0
-                        speech_count = 0
-                    else:
-                        speech_frames = []
-                        non_speech_count = 0
-                        speech_count = 0
-
+    # Clean up stream
     stream.stop_stream()
     stream.close()
     p.terminate()
