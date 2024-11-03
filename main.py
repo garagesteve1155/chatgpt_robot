@@ -18,11 +18,15 @@ import base64
 import signal
 import traceback
 import random
+from queue import Queue
+
+# Create a queue to share the boxes and class IDs between threads
+yolo_data_queue = Queue()
+
 # Initialize the recognizer and VAD with the highest aggressiveness setting
 r = sr.Recognizer()
 vad = webrtcvad.Vad(3)  # Highest sensitivity
 print("Initialized recognizer and VAD.")
-in_task = False
 # Audio stream parameters
 CHUNK = 320  # 20 ms of audio at 16000 Hz
 FORMAT = pyaudio.paInt16
@@ -266,6 +270,11 @@ def remove_overlapping_boxes(boxes, class_ids, confidences):
 # 6. YOLO Detection Function with Distance Estimation
 # -----------------------------------
 
+import time
+import cv2
+import numpy as np
+from datetime import datetime
+
 def yolo_detect():
     global chat_history
     """
@@ -283,23 +292,36 @@ def yolo_detect():
     """
     now = datetime.now()
     the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+    
+    # Dictionary to store times
+    time_logs = {}
+    
+    # Start time tracking
+    total_start = time.time()
+
     try:
+        # Load image
+        start = time.time()
         img = cv2.imread('this_temp.jpg')
         if img is None:
             print("Error: Image 'this_temp.jpg' not found.")
             return
         height, width, channels = img.shape
+        time_logs['Load Image'] = time.time() - start
 
         # Prepare the image for YOLO
-        blob = cv2.dnn.blobFromImage(img, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
+        start = time.time()
+        blob = cv2.dnn.blobFromImage(img, 0.00392, (320, 320), (0, 0, 0), True, crop=False)
         net.setInput(blob)
         outs = net.forward(output_layers)
+        time_logs['YOLO Forward'] = time.time() - start
 
+        # Extract bounding boxes and confidences
+        start = time.time()
         class_ids = []
         confidences = []
         boxes = []
 
-        # Extract bounding boxes and confidences
         for out in outs:
             for detection in out:
                 scores = detection[5:]
@@ -315,19 +337,22 @@ def yolo_detect():
                     boxes.append([x, y, w, h])
                     confidences.append(float(confidence))
                     class_ids.append(class_id)
+        time_logs['Extract Bounding Boxes'] = time.time() - start
 
         # Remove overlapping boxes
+        start = time.time()
         boxes, class_ids, confidences = remove_overlapping_boxes(boxes, class_ids, confidences)
-
-        # Initialize a list for descriptions
+        time_logs['Remove Overlapping Boxes'] = time.time() - start
+        yolo_data_queue.put((boxes, class_ids))
+        # Annotate image and generate descriptions
+        start = time.time()
         descriptions = []
-
         for i in range(len(boxes)):
             x, y, w, h = boxes[i]
             label = str(classes[class_ids[i]]).lower()
             color = (0, 255, 0)
             cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
-            
+
             label_position = (x, y - 10) if y - 10 > 10 else (x, y + h + 10)
             cv2.putText(img, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
@@ -342,7 +367,7 @@ def yolo_detect():
 
             # Generate and collect descriptions with distance
             pos_desc = get_position_description(x + w/2, y + h/2, width, height)
-            if float(distance) < 0.5:
+            if float(distance) < 0.8:
                 description = f"You are close to a {label} that is about {distance:.2f} meters away. You can center your camera on it by doing these moves (you should only center on this object if it is what you are looking for): {pos_desc}."
             else:
                 description = f"There is a {label} about {distance:.2f} meters away. You are not close to it. You can center your camera on it by doing these moves (you should only center on this object if it is what you are looking for): {pos_desc}."
@@ -350,25 +375,44 @@ def yolo_detect():
 
             # Optional: Annotate distance on the image
             cv2.putText(img, f"{distance:.2f}m", (x, y + h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        time_logs['Annotate Image & Generate Descriptions'] = time.time() - start
+
+        # Save descriptions to a file
+        start = time.time()
         if descriptions != []:
-            # Save descriptions to a file
             with open("output.txt", "w") as file:
                 file.write('\n'.join(descriptions))
         else:
             with open("output.txt", "w") as file:
-                file.write('')            
-        # Update chat history with descriptions
-        
-        # Display and save the processed image
-        cv2.imwrite("output.jpg", img)
-        cv2.imwrite('Pictures/'+str(int(time.time()))+".jpg", img)
-        print('\nYOLO Detections:')
+                file.write('')
+        time_logs['Save Descriptions'] = time.time() - start
 
+        # Display and save the processed image
+        start = time.time()
+        cv2.imwrite("output.jpg", img)
+        cv2.imwrite('Pictures/' + str(time.time()).replace('.', '-') + '.jpg', img)
+        time_logs['Save Images'] = time.time() - start
+
+        # Print YOLO detections
+        print('\nYOLO Detections:')
         for desc in descriptions:
             print(desc)
+
+        # Print the times for each step
+        total_time = time.time() - total_start
+        time_logs['Total Time'] = total_time
         
+        # Find the step that took the longest
+        longest_step = max(time_logs, key=time_logs.get)
+        print(f"\nLongest step: {longest_step} took {time_logs[longest_step]:.4f} seconds.")
+
+        # Print all steps and their times
+        for step, duration in time_logs.items():
+            print(f"{step}: {duration:.4f} seconds")
+
     except Exception as e:
         print(f"Error in yolo_detect: {e}")
+
 
 
 
@@ -641,8 +685,102 @@ def send_data_to_arduino(data, address):
             time.sleep(0.5)
             continue
 
-task = 'No task is currently set.'
-task_steps = ''
+
+import math
+
+def create_video_from_images(image_folder, output_video):
+    # Get a list of all image filenames in the folder
+    images = [img for img in os.listdir(image_folder) if img.endswith(".jpg") or img.endswith(".png")]
+
+    # Prepare a list to hold tuples of (timestamp, filename)
+    image_filenames = []
+    for img in images:
+        # Remove the file extension to extract the timestamp
+        name, ext = os.path.splitext(img)
+        try:
+            # Convert the dash back to a decimal and then to a float timestamp
+            timestamp = float(name.replace("-", "."))
+            image_filenames.append((timestamp, img))
+        except ValueError:
+            print(f"Skipping file '{img}': filename is not a valid timestamp.")
+            continue
+
+    # Sort the images by the float timestamp
+    image_filenames.sort(key=lambda x: x[0])
+
+    # Extract the sorted filenames
+    sorted_images = [img for _, img in image_filenames]
+
+    # Check if there are images
+    if len(sorted_images) == 0:
+        print("No valid images found in the folder.")
+        return
+
+    # Read the first image to get its dimensions
+    first_image_path = os.path.join(image_folder, sorted_images[0])
+    frame = cv2.imread(first_image_path)
+    if frame is None:
+        print(f"Error: Could not read the first image '{first_image_path}'.")
+        return
+    height, width, layers = frame.shape
+
+    print(f"First image dimensions: width={width}, height={height}, layers={layers}")
+
+    # Define the codec and create a VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')  # Try 'XVID' codec
+    video = cv2.VideoWriter(output_video, fourcc, 1, (width, height))  # Setting fps to 1, we'll control duration manually
+    if not video.isOpened():
+        print("Error: VideoWriter not opened.")
+        return
+
+    frame_count = 0
+
+    # Loop over each image and calculate the duration for each frame
+    for i in range(len(sorted_images) - 1):
+        current_image = sorted_images[i]
+        next_image = sorted_images[i + 1]
+
+        current_image_path = os.path.join(image_folder, current_image)
+        next_image_path = os.path.join(image_folder, next_image)
+
+        # Get the timestamps from the filenames
+        current_timestamp = float(os.path.splitext(current_image)[0].replace("-", "."))
+        next_timestamp = float(os.path.splitext(next_image)[0].replace("-", "."))
+
+        # Calculate the time difference (in seconds) between the two frames
+        time_diff = next_timestamp - current_timestamp
+
+        # Read the current frame
+        frame = cv2.imread(current_image_path)
+        if frame is None:
+            print(f"Warning: Could not read image '{current_image_path}'. Skipping.")
+            continue
+
+        # Resize frame if necessary
+        if (frame.shape[1], frame.shape[0]) != (width, height):
+            print(f"Resizing frame '{current_image}' from {frame.shape[1]}x{frame.shape[0]} to {width}x{height}")
+            frame = cv2.resize(frame, (width, height))
+
+        # Add the frame to the video, repeated according to the time difference
+        num_frames_to_add = math.ceil(time_diff)  # You can adjust this to control how precise the time gap is represented
+        for _ in range(num_frames_to_add):
+            video.write(frame)
+            frame_count += 1
+            print(f"Added frame '{current_image}' to video for {num_frames_to_add} frames.")
+
+    # Handle the last image (since it won't have a next image for time comparison)
+    last_image_path = os.path.join(image_folder, sorted_images[-1])
+    frame = cv2.imread(last_image_path)
+    if frame is not None:
+        for _ in range(30):  # Display last frame for a fixed 30 frames (arbitrary choice)
+            video.write(frame)
+        frame_count += 30
+
+    # Release the video writer
+    video.release()
+    print(f"Video saved as '{output_video}' with {frame_count} frames.")
+
+
 while True:
     try:
         print('connecting to arduino bluetooth')
@@ -694,7 +832,6 @@ def read_distance_from_arduino():
         return 0
 
 chat_history = []
-stop_threads = False
 
 try:
     file = open('key.txt','r')
@@ -712,89 +849,9 @@ def capture_image(camera, raw_capture):
     return image
 
 
-
-
-
-                
-      
-def get_column_height():
-    image_filename = 'output.jpg'
-    frame = cv2.imread(image_filename)
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 100, 200)
-    height, width = frame.shape[:2]
-
-    # Define the custom width for the center column: center 50%
-    left_width = width // 4
-    center_width = width // 2
-    x1, x2 = left_width, left_width + center_width  # Coordinates for the center column
-
-    # Initialize the heights as the number of squares from the bottom
-    edge_height = 0  # Start counting at 0 for edge detection
-    color_height = 0  # Start counting at 0 for color/brightness change detection
-
-    # Get the color/brightness of the bottom square
-    bottom_square = gray[8 * height // 9: height, x1:x2]
-    bottom_avg_brightness = np.mean(bottom_square)
-
-    # Edge detection loop
-    for row in range(9):  # Iterate from the bottom square to the top for edge detection
-        y1, y2 = (8 - row) * height // 9, (9 - row) * height // 9  # Divide into 9 sections
-        square_edges = edges[y1:y2, x1:x2]
-
-        # Check for edges in the current square
-        if np.any(square_edges):
-            break  # Stop at the first square with an edge (don't count it)
-        # Increment the edge height if no edge is detected
-        edge_height += 1
-
-    # Color/brightness detection loop
-    for row in range(9):  # Iterate from the bottom square to the top for color detection
-        y1, y2 = (8 - row) * height // 9, (9 - row) * height // 9  # Divide into 9 sections
-        square_brightness = np.mean(gray[y1:y2, x1:x2])  # Calculate the average brightness of the current square
-
-        # Check for drastic change in brightness compared to the bottom square
-        if abs(square_brightness - bottom_avg_brightness) > 50:  # 50 is an arbitrary threshold for drastic change
-            break  # Stop at the first square with a drastic color/brightness change (don't count it)
-        # Increment the color height if no drastic brightness change is detected
-        color_height += 1
-
-    # The final height is the minimum of the edge height and color height
-    final_height = min(edge_height, color_height)
-
-    # Save the final height to a file
-    with open('column_height.txt', 'w+') as f:
-        f.write(str(color_height) + '\n')
-  
-
-
-    
-    """
-    #UNCOMMENT THIS SECTION TO SHOW IMAGE
-    for i in range(3):
-        print(f"Column {i} is {heights[i]:.2f} squares high before encountering an edge.")
-        x_position = i * width // 3 + 20
-        cv2.putText(frame, f"Height: {heights[i]:.2f}",
-                    (x_position, height - 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
-    print("Drawing green edges on the original frame...")
-    frame[edges != 0] = [0, 255, 0]
-    print("Displaying the processed frame...")
-    cv2.imshow("Edge Detection & Grid Highlighting", frame)
-    cv2.waitKey(1000)  # Wait for a key press to close the window
-    print("Closing all windows...")
-    cv2.destroyAllWindows()
-    print("Resources released and windows closed successfully.")
-    """
-
-
-
-
-
-
-def send_text_to_gpt4_move(history,percent, current_distance, phrase, task, task_steps, user_name, user_data, mems, failed):
+def send_text_to_gpt4_move(history,percent, current_distance, phrase, user_name, user_data, mems, failed):
     global camera_vertical_pos
-    global in_task
+    
     from datetime import datetime
     now = datetime.now()
     the_time = now.strftime("%m/%d/%Y %H:%M:%S")
@@ -815,47 +872,20 @@ def send_text_to_gpt4_move(history,percent, current_distance, phrase, task, task
 
 
 
-    if in_task:
-        if yolo_detections != '':
-            response_choices = (
-                "Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Around 180 Degrees, "
-                "Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, "
-                "Raise Camera Angle, Lower Camera Angle, Navigate To Specific Yolo Object, Say Something, Alert User, No Movement, End Conversation, Good Bye, "
-                "End Task, Mark Off A Completed Task Step\n\n"
-            )
-        else:
-            response_choices = (
-                "Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Around 180 Degrees, "
-                "Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, "
-                "Raise Camera Angle, Lower Camera Angle, Say Something, Alert User, No Movement, End Conversation, Good Bye, "
-                "End Task, Mark Off A Completed Task Step\n\n"
-            )
-        if failed != '':
-            response_choices = response_choices.replace(failed, '')
-        else:
-            pass
-        task_data = (
-            f"Your current task: {task}\n\nSteps To Complete Task\n{task_steps}\n\n"
-            "If all steps have been completed, choose End Task. If you need to mark a completed step off the list of steps, choose Mark Off A Completed Task Step."
+    if yolo_detections != '':
+        response_choices = (
+            "Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Around 180 Degrees, Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, Do A Set Of Multiple Movements, Raise Camera Angle, Lower Camera Angle, Focus Camera On Specific Yolo Object, Find Unseen Yolo Object, Navigate To Specific Yolo Object, Say Something, Alert User, No Movement, End Conversation, Good Bye.\n\n"
         )
     else:
-        if yolo_detections != '':
-            response_choices = (
-                "Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Around 180 Degrees, "
-                "Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, "
-                "Raise Camera Angle, Lower Camera Angle, Navigate To Specific Yolo Object, Say Something, Alert User, No Movement, End Conversation, Good Bye, Start Task\n\n"
-            )
-        else:
-            response_choices = (
-                "Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Around 180 Degrees, "
-                "Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, "
-                "Raise Camera Angle, Lower Camera Angle, Say Something, Alert User, No Movement, End Conversation, Good Bye, Start Task\n\n"
-            )            
-        if failed != '':
-            response_choices = response_choices.replace(failed, '')
-        else:
-            pass
-        task_data = task
+        response_choices = (
+            "Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Around 180 Degrees, Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, Do A Set Of Multiple Movements, Raise Camera Angle, Lower Camera Angle, Find Unseen Yolo Object, Say Something, Alert User, No Movement, End Conversation, Good Bye.\n\n"
+        )
+    if failed != '':
+        response_choices = response_choices.replace(failed, '')
+    else:
+        pass
+
+
 
     # Initialize the payload with the system message with static instructions
     payload = {
@@ -873,7 +903,7 @@ def send_text_to_gpt4_move(history,percent, current_distance, phrase, task, task
 
         timestamp, content = timestamp_and_content
 
-        if "User Greeting:" in content or "Prompt heard from microphone" in content:
+        if "User Greeting:" in content or "You just heard this prompt" in content:
             # User message
             message_content = content.split(": ", 1)[-1]
             payload["messages"].append({
@@ -888,9 +918,14 @@ def send_text_to_gpt4_move(history,percent, current_distance, phrase, task, task
                 "content": message_content
             })
     if yolo_detections != '':
-        navi = 'If you are choosing Navigate To Specific Yolo Object, then give it as your response choice, then followed by ~~ and then replace your Reasoning with the yolo coco name of the object, and then followed by - with a space on each side, and then followed by the desired distance to be from the object after successful navigation. The robot will automatically navigate to whichever yolo object you choose. Only choose Navigate To Specific Yolo Object if you need to move to that object. You can only choose to navigate to a yolo object that you are currently detecting.\n\n'
+        navi = 'If you are choosing Navigate To Specific Yolo Object, then use Navigate To Specific Yolo Object as your response choice, then followed by ~~ and then replace your Reasoning with the closest relevant standard yolo coco name that goes with the object. The robot will automatically navigate to whichever yolo object you choose. Only choose Navigate To Specific Yolo Object if you need to move to that object. You can only choose to navigate to a yolo object that you are currently detecting. Do not choose Navigate To Specific Yolo Object if you see in the history that you have already successfully navigated to the target object. You cannot choose to navigate to a specific object if the distance to that object is less than 0.8 meters or if you recently finished navigating to that object. If the user wants you to come to them or you want to go to the user, then navigate to a person object.\n\n'
+        object_focus = 'If you are choosing Focus Camera On Specific Yolo Object, then use Focus Camera On Specific Yolo Object as your response choice, then followed by ~~ and then replace your Reasoning with the closest relevant standard yolo coco name that goes with whatever type of object you are looking for. The robot will automatically focus the camera on whichever yolo object you choose. Only choose Focus Camera On Specific Yolo Object if you need to constantly focus on that object. You can only choose to focus the camera on a yolo object that you are currently detecting. If the user wants you to look at them, then choose the person class.\n\n'
     else:
         navi = ''
+        object_focus = ''
+    object_find = 'If you are choosing Find Unseen Yolo Object, then use Find Unseen Yolo Object as your response choice, then followed by ~~ and then replace your Reasoning with absolutely only the yolo coco name of the object. The robot will automatically try to find whichever yolo object you choose so you absolutely must choose an actual yolo coco object from the standard list of 80, just choose the closest standard coco yolo object to what you are looking for. Only choose Find Unseen Yolo Object if you need to find an object that you do not currently see with Yolo.\n\n'
+    multi_moves = 'If you are choosing Do A Set Of Multiple Movements instead of choosing an individual command, then use Do A Set Of Multiple Movements as your response choice, then followed by ~~ and then replace your Reasoning with the list of moves you want the robot to make (separate the moves by a comma and space). They will happen one after another, starting at index 0. If the robot experiences any issues trying to do the set of moves, it will cancel doing the rest of the set and prompt you again to let you know there is an issue. You can only choose movements that make you move forward, backwards, or turn. You cannot choose camera adjustment commands or any of the other commands. Only movement commands are allowed.\n\n'
+
     # Prepare the dynamic data to include in the last user message
     dynamic_data = (
         "You are a 4-wheeled mobile robot.\n\n"
@@ -899,24 +934,22 @@ def send_text_to_gpt4_move(history,percent, current_distance, phrase, task, task
         "Your answer must be a response choice followed by ~~ (with a space on each side), followed by your reasoning for your response choice (Or if you are choosing Say Something or Alert User then this is where you put what you want to say), and then followed by ~~ with a space on each side and then followed by the name of the person or people you are talking to right now (If multiple people then separate each name by a comma and a space).\n\n"
         "If you want to move to a particular object, make sure you turn and center on it between left and right first with YOLO before moving forward towards it. If you cannot see what you are trying to see, turning most likely is a better option than going forward, but not all the time.\n\n"
         "The part of your response where you put either your reasoning or what you want to say or your alert can be no longer than like 2 to 4 sentences, but ideally less, like as few words as possible unless you have to say more.\n\n"
-        "If no areas are drivable, then turn, because you turn in place like a tank, so it's okay to turn if there are no drivable areas.\n\n"
         "Your response must be formatted perfectly according to the template I gave, and your response choice must be worded exactly the same as one of the options from the list of response choices. You absolutely must format your response correctly as mentioned in the instructions.\n\n"
         "You cannot include any preface labels in your response (for example, do not start your response with 'Response Choice: ...'; you should just state the choice).\n\n"
         "As a final reminder, your response choice must be worded exactly the same as the choices from the provided Response Choices list; you must use the exact same words in your response choice. And if you Say Something or Alert User, replace the Reasoning area with what you want to say (And you must speak normally and realistically like a person).\n\n"
         "And your response must be formatted exactly according to the template I mentioned.\n\n"
-        "Only choose Good Bye or End Conversation if the user says good bye or to end the conversation.\n\n"
-        "Do not just turn back and forth repeatedly. That will get you nowhere.\n\n"
-        "If you are not in a task and you are told to do something, then start task but only start task if you are explicitely told to do something, otherwise do not choose this response choice.\n\n"
+        "Only choose Good Bye or End Conversation if the user says good bye or to end the conversation. If you are told goodbye, do not say something, just choose goodbye. You still must follow the response template correctly and do your response choice, followed by ~~ with a space on each side, followed by your reasoning, followed by ~~ with a space on each side.\n\n"
+        f"{multi_moves}"
+        f"{object_find}"
         f"{navi}"
-        "Make sure to pay attention the chat history and what has been said and what actions the robot has taken so you have the full context and can make better decisions.\n\n"
+        f"{object_focus}"
+        "If your most recent navigation has finished successfully then say something about how the navigation was succesful and you are done navigating to the object now.\n\n"
         "If you are going to say something, do not just repeat what you hear from your microphone.\n\n"
         f"You have a camera and an HCSR04 distance sensor pointing in the same direction as the camera, and the distance sensor detects the distance to whatever object that YOLO says is in the absolute middle center of the image. Here is the distance it currently says: {current_distance}\n\n"
         f"Your camera is currently pointed {camera_vertical_pos}.\n\n"
         "Here is the currently detected YOLO objects and the movement choices necessary to center your camera on each specific object\n"
-        "(THIS IS THE ABSOLUTE CURRENT YOLO DATA):\n"
+        "(THIS IS WHAT YOU CURRENTLY SEE OTHER THAN WHAT YOU SEE IN THE INCLUDED IMAGE):\n"
         f"{yolo_detections}\n\n"
-        #f"{edge_detect}\n\n"
-        f"{task_data}\n\n"
         f"You are currently talking to {', '.join(user_name)}. Here is some info about them:\n\n"
         f"{user_data}\n\n"
         f"Your personal relevant memories from your past experiences as a robot:\n{mems}\n\n"
@@ -946,8 +979,8 @@ def send_text_to_gpt4_move(history,percent, current_distance, phrase, task, task
     return str(response.json()["choices"][0]["message"]["content"])
 
 
-def send_text_to_gpt4_convo(history, text, task, task_steps, mems):
-    global in_task
+def send_text_to_gpt4_convo(history, text, mems):
+    
     print('getting yolo')
     with open('output.txt','r') as file:
         yolo_detections = file.read()
@@ -959,11 +992,7 @@ def send_text_to_gpt4_convo(history, text, task, task_steps, mems):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
-    print('task')
-    if in_task == True:
-        task_data = f"Your current task: {task}\n\nSteps To Complete Task\n{task_steps}\n\n"
-    else:
-        task_data = task
+
     print('battery')
     with open('batt_per.txt','r') as file:
         percent = file.read()
@@ -1032,7 +1061,7 @@ def send_text_to_gpt4_convo(history, text, task, task_steps, mems):
     # Finally, include the current prompt as the latest user message
     payload["messages"].append({
         "role": "user",
-        "content": f"Your personal relevant memories from your past experiences as a robot:\n{mems}\n\nYour battery percentage is: {percent}%.\n\nThe current time and date is: {the_time}.\n\nYour camera is currently pointed {camera_vertical_pos}.\n\n{task_data}\n\nThe current YOLO visual data from your camera and the movement choices necessary to center your camera on each specific object (This is what you currently see. If its blank then no YOLO detections have been made on this frame): {yolo_detections}\n\nThe current distance in CM to any yolo object in the center of the image: {str(distance)}\n\n{text.strip()}"
+        "content": f"Your personal relevant memories from your past experiences as a robot:\n{mems}\n\nYour battery percentage is: {percent}%.\n\nThe current time and date is: {the_time}.\n\nYour camera is currently pointed {camera_vertical_pos}.\n\nThe current YOLO visual data from your camera and the movement choices necessary to center your camera on each specific object (This is what you currently see. If its blank then no YOLO detections have been made on this frame): {yolo_detections}\n\nThe current distance in CM to any yolo object in the center of the image: {str(distance)}\n\n{text.strip()}"
     })
 
     # Include the max_tokens parameter
@@ -1069,7 +1098,7 @@ def get_chat_summary(history, mem_sum):
                 "content": [
                     {
                         "type": "text",
-                        "text": 'You are a 4wd mobile arduino and raspberry pi robot that is controlled by ChatGPT. Give a summary of this session history (Oldest to newest): ' + str(history) + ' \n\n Make sure to include important facts, events, goals, conversational information, learned information, and any other data worth keeping in the robot memory so it has useful information to use on future prompts (The prompts that choose the robot actions and when to speak are given relevant memories so this has to include good relevant knowledge). \n\n\nHeres contextually relevant memories that the robot already has that you can use as extra context when creating your overview of the current history with the person: \n\n' + mem_sum+'\n\nKeep your response as short as possible but include all important information so it can be longer if absolutely necessary. Your summary will be given to chatgpt for helping chatgpt decide how to control the robot so make sure you word it in a way where it is focused on enhancing the understanding and ability of chatgpt to control the robot.'
+                        "text": 'You are a 4wd mobile arduino and raspberry pi robot that is controlled by ChatGPT. Give a summary of this session history (Oldest to newest): ' + str(history) + ' \n\n Make sure to include important facts, events, goals, conversational information, learned information, and any other data worth keeping in the robot memory so it has useful information to use on future prompts (The prompts that choose the robot actions and when to speak are given relevant memories so this has to include good relevant knowledge). \n\n\nHeres contextually relevant memories that the robot already has that you can use as extra context when creating your overview of the current history with the person: \n\n' + mem_sum+'\n\nKeep your response as short as possible but include all important information so it can be longer if absolutely necessary. Your summary will be given to chatgpt for helping chatgpt decide how to control the robot so make sure you word it in a way where it is focused on enhancing the understanding and ability of chatgpt to control the robot. Your summaries will be used in prompts to ChatGPT for controlling the robot, so the ways to improve should be about how to get chatgpt to respond better, not about changes to the robot itself.'
                     }
                 ]
             }
@@ -1081,66 +1110,65 @@ def get_chat_summary(history, mem_sum):
     return response.json()["choices"][0]["message"]["content"]
 
 def get_memory_summary(): #to be used on memory thread
-    global chat_history
-    while not stop_threads:
+    
 
-        memory_dir = 'memories/'
+    memory_dir = 'memories/'
 
-        # Initialize an empty string to hold the contents of all memory files
-        memory_file_data = ''
+    # Initialize an empty string to hold the contents of all memory files
+    memory_file_data = ''
 
-        # Get a list of all files in the memories directory
-        memory_files = os.listdir(memory_dir)
+    # Get a list of all files in the memories directory
+    memory_files = os.listdir(memory_dir)
 
-        # Loop through each file in the directory
-        while memory_files:
-            # Open the file at index 0 of the list
-            file_path = os.path.join(memory_dir, memory_files[0])
-            with open(file_path, 'r') as file:
-                # Add file content to memory_file_data with a new line
-                memory_file_data += file.read() + '\n'
-            
-            # Remove the processed file from the list, but leave it on the hard drive
-            del memory_files[0]
-
-        # Print or use the final memory_file_data string
-        print('got memory file data')
+    # Loop through each file in the directory
+    while memory_files:
+        # Open the file at index 0 of the list
+        file_path = os.path.join(memory_dir, memory_files[0])
+        with open(file_path, 'r') as file:
+            # Add file content to memory_file_data with a new line
+            memory_file_data += file.read() + '\n'
         
+        # Remove the processed file from the list, but leave it on the hard drive
+        del memory_files[0]
 
-        while True:
-            try:
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}"
-                }
-                
+    # Print or use the final memory_file_data string
+    print('got memory file data')
+    
 
-                #get chatgpt to summarize the memory file data using the chat history as the context of what information to put in the summary
-                payload = {
-                    "model": "gpt-4o-mini",
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": 'You are a 4wd mobile arduino and raspberry pi robot that is controlled by ChatGPT. Summarize the memory file data using the chat history as the context of what information to put in the summary. \n\n MEMORY FILE DATA:\n'+memory_file_data+'\n\nChat and Movement History that should be the context of what to put in your summary of the memory file data:\n'+'\n'.join(chat_history)
-                                }
-                            ]
-                        }
-                    ]
-                }
-                print('got response')
-                response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-                print('got response')
-                #save response to file
-                with open('memory_summary.txt','w+') as f:
-                    f.write(response.json()["choices"][0]["message"]["content"])
-                break
-            except:
-                #if prompt is too long, get chatgpt to summarize each file and save the new summary to the file and then start this process over again until the memory data isnt too much
-                print(traceback.format_exc())
-                continue
+    while True:
+        try:
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            }
+            
+
+            #get chatgpt to summarize the memory file data using the chat history as the context of what information to put in the summary
+            payload = {
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": 'You are a 4wd mobile arduino and raspberry pi robot that is controlled by ChatGPT. Summarize the robot memory data. \n\n Your summary will be used in prompts to ChatGPT for controlling the robot, so the ways to improve should be about how to get chatgpt to respond better, not about physical or software changes to the robot itself. \n\n MEMORY FILE DATA:\n'+memory_file_data
+                            }
+                        ]
+                    }
+                ]
+            }
+            response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+            print('got response')
+            #save response to file
+            with open('memory_summary.txt','w+') as f:
+                f.write(response.json()["choices"][0]["message"]["content"])
+            time.sleep(10)
+            break
+        except:
+            #if prompt is too long, get chatgpt to summarize each file and save the new summary to the file and then start this process over again until the memory data isnt too much
+            print(traceback.format_exc())
+            continue
 
 
     
@@ -1184,68 +1212,7 @@ def get_person_summary(history, user):
     
     return response.json()["choices"][0]["message"]["content"]
     
-def get_task(history, phrase):
-    now = datetime.now()
-    the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-    
 
-    
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-    
-
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": 'You are a 4 wheeled mobile robot that is fully controlled by ChatGPT (Specifically GPT4o). Based on this Movement, Chat, Sensor/Battery, and Visual Data History from the most recent conversation/event youve had (Oldest to newest): ' + str(history) + '\n\n'+phrase+'\n\n You have been told to start a task so say what the task is that you are going to start, then followed by ~~, then followed by the list of steps you will need to take to accomplish the task.' 
-                    }
-                ]
-            }
-        ]
-    }
-
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    
-    return response.json()["choices"][0]["message"]["content"]
-def mark_off_a_completed_step(history, phrase, task, task_steps):
-    now = datetime.now()
-    the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-    
-
-    
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-    
-
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": 'You are a 4 wheeled mobile robot that is fully controlled by ChatGPT (Specifically GPT4o). You are currently doing this task: '+task+' You have been told a new task step has been completed. Based on this Movement, Chat, Sensor/Battery, and Visual Data History from the most recent conversation/event youve had (Oldest to newest): ' + str(history) + '\n\n'+phrase+'\n\n choose which step from this list that has just been completed (only say literally what the step is, word for word how it is on the list) and then followed by ~~ and then followed by which step is now the current step to work on (You must word it EXACTLY the same as it is on this list):\n'+task_steps 
-                    }
-                ]
-            }
-        ]
-    }
-
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    
-    return response.json()["choices"][0]["message"]["content"]
 
 def say_greeting(last_phrase):
     global chat_history
@@ -1258,7 +1225,7 @@ def say_greeting(last_phrase):
     with open('memory_summary.txt','r') as f:
         memories = f.read()
     print('got memory summary')
-    text = str(send_text_to_gpt4_convo(chat_history, last_phrase, task, task_steps, memories))
+    text = str(send_text_to_gpt4_convo(chat_history, last_phrase, memories))
     print('got gpt response')
     chat_history.append('Time: ' + str(the_time) + ' - User Greeting: ' + last_phrase)  # add response to chat history
     chat_history.append('Time: ' + str(the_time) + ' - Robot Greeting: ' + text)  # add response to chat history
@@ -1302,9 +1269,21 @@ def get_last_phrase2():
 # Load YOLOv4-tiny configuration and weights
 net = cv2.dnn.readNet("yolov4-tiny.cfg", "yolov4-tiny.weights")
 
-# Load COCO names
-with open("coco.names", "r") as f:
-    classes = [line.strip() for line in f.readlines()]
+classes = [
+    'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 
+    'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 
+    'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 
+    'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 
+    'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 
+    'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 
+    'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 
+    'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'sofa', 
+    'potted plant', 'bed', 'dining table', 'toilet', 'tv monitor', 'laptop', 
+    'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 
+    'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 
+    'hair dryer', 'toothbrush'
+]
+
 
 layer_names = net.getLayerNames()
 # Adjust the index extraction to handle the nested array structure
@@ -1317,29 +1296,30 @@ person_data = 'No data about person yet.'
 
 move_stopper = False
 
-        
+
+
+
  
 def movement_loop(camera, raw_capture):
     global chat_history
     global frame
-    global stop_threads
     global net
     global output_layers
     global classes
     global move_stopper
     global camera_vertical_pos
-    global in_task
-    global task
-    global task_steps
     global person
     global person_data
     ina219 = INA219(addr=0x42)
     last_time = time.time()
     failed_response = ''
     movement_response = ' ~~  ~~ '
+    move_set = []
     yolo_nav = False
+    yolo_find = False
+    yolo_look = False
     #print('movement thread start')
-    while not stop_threads:
+    while True:
         try:
             with open('current_history.txt','w+') as file:
                 file.write('\n'.join(chat_history))
@@ -1347,25 +1327,21 @@ def movement_loop(camera, raw_capture):
             if last_phrase2 != '':
                 print('Last phrase now on movement loop: ' + last_phrase2)
                 
-                last_phrase2 = 'You just heard this from your microphone so THIS IS THE MAIN PART OF THE PROMPT (You need to respond to this by saying something most likely): ' + last_phrase2
-                
+                last_phrase2 = 'You just heard this prompt from your microphone. Do not repeat this prompt, actually respond. DO NOT SAY THIS, RESPOND TO IT INSTEAD WITH EITHER SPEECH OR ANOTHER OF THE AVAILABLE RESPONSE CHOICES: ' + last_phrase2
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
             else:
                 pass
 
-            frame = capture_image(camera, raw_capture)
-            cv2.imwrite('this_temp.jpg', frame)
-        
-      
-            
-
-            #do yolo and gpt visual threads
-            
-            yolo_thread = threading.Thread(target=yolo_detect)
-            yolo_thread.start()
-            yolo_thread.join()
-            columns_thread = threading.Thread(target=get_column_height)
-            columns_thread.start()
-            columns_thread.join()
+            try:
+                frame = capture_image(camera, raw_capture)
+                cv2.imwrite('this_temp.jpg', frame)
+            except:
+                print(traceback.format_exc())
+                time.sleep(0.1)
+                continue
+            yolo_detect()
             
             
             current = ina219.getCurrent_mA() 
@@ -1393,9 +1369,10 @@ def movement_loop(camera, raw_capture):
                 memories = f.read()
             if current > 0.0 or per < 10.0:
                 try:
-                    stop_threads = True
                     last_time = time.time()
-                    
+                    image_folder = 'Pictures/'  # Replace with the path to your image folder
+                    output_video = 'output_video.avi'  # Change the extension to .avi
+                    create_video_from_images(image_folder, output_video)
                     #create summary of history
                     chat_summary = get_chat_summary(chat_history, memories)
                     #save to file
@@ -1443,9 +1420,12 @@ def movement_loop(camera, raw_capture):
                             else:
                                 continue
                     #print('ending convo')
+                    get_memory_summary()
                     chat_history = []
+                    break
                 except Exception as e:
                     print(traceback.format_exc())
+                    break
             else:
                 pass
             if move_stopper == True:
@@ -1457,55 +1437,165 @@ def movement_loop(camera, raw_capture):
                 if frame is not None:
                     now = datetime.now()
                     the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-
-                    if yolo_nav == True:
-                        print('navigating')
-                        #do yolo navigation to specific object
-                        yolo_nav_index = 0
-                        with open('output.txt','r') as file:
-                            yolo_detections = file.readlines()
-                        while True:
-                            try:
-                                current_detection = yolo_detections[yolo_nav_index]
-                                current_distance1 = current_detection.split(' ') #extract distance
-                                current_distance = float(current_distance1[current_distance1.index('meters')-1])
-                                if nav_object in current_detection and current_distance > float(nav_distance.split(' ')[0]):
-                                    print('object seen')
-                                    #follow any human seen
-                                    if 'Turn Left 15 Degrees' in current_detection:
-                                        movement_response = 'Turn Left 15 Degrees ~~ Target object is to the left ~~ '
-                                    elif 'Turn Right 15 Degrees' in current_detection:
-                                        movement_response = 'Turn Right 15 Degrees ~~ Target object is to the right ~~ '
+                    if move_set == []:
+                        if yolo_nav == True:
+                            print('navigating')
+                            #do yolo navigation to specific object
+                            yolo_nav_index = 0
+                            with open('output.txt','r') as file:
+                                yolo_detections = file.readlines()
+                            while True:
+                                try:
+                                    current_detection = yolo_detections[yolo_nav_index]
+                                    current_distance1 = current_detection.split(' ') #extract distance
+                                    current_distance = float(current_distance1[current_distance1.index('meters')-1])
+                                    if nav_object in current_detection and current_distance > 0.8:
+                                        print('object seen')
+                                        #follow any human seen
+                                        if 'Turn Left 15 Degrees' in current_detection:
+                                            movement_response = 'Turn Left 15 Degrees ~~ Target object is to the left ~~ '
+                                        elif 'Turn Right 15 Degrees' in current_detection:
+                                            movement_response = 'Turn Right 15 Degrees ~~ Target object is to the right ~~ '
+                                        else:
+                                            movement_response = 'Move Forward One Foot ~~ Target object is straight ahead ~~ '
+                                        
+                                        break
                                     else:
-                                        movement_response = 'Move Forward One Foot ~~ Target object is straight ahead ~~ '
-                                    
+                                        if current_distance <= 0.8:
+                                            movement_response = 'No Movement ~~ Navigation has finished Successfully! ~~ '
+                                            yolo_nav = False
+                                            break
+                                        else:
+                                            yolo_nav_index += 1
+                                            if yolo_nav_index >= len(yolo_detections):
+                                                movement_response = 'No Movement ~~ Target object lost ~~ '
+                                                yolo_nav = False
+                                                yolo_find = True
+                                                scan360 = 0
+                                                break
+                                            else:
+                                                continue
+                                except:
+                                    movement_response = 'No Movement ~~ Yolo navigation failed. Must be detecting object first. ~~ '
+                                    yolo_nav = False
+                                    yolo_find = True
                                     break
-                                else:
-                                    if current_distance <= float(nav_distance.split(' ')[0]):
-                                        movement_response = 'No Movement ~~ Navigation has finished Successfully! ~~ '
-                                        yolo_nav = False
+                        elif yolo_look == True:
+                            print('Looking at object')
+                            #do yolo navigation to specific object
+                            yolo_look_index = 0
+                            with open('output.txt','r') as file:
+                                yolo_detections = file.readlines()
+                            while True:
+                                try:
+                                    current_detection = yolo_detections[yolo_look_index]
+                                    current_distance1 = current_detection.split(' ') #extract distance
+                                    current_distance = float(current_distance1[current_distance1.index('meters')-1])
+                                    if look_object in current_detection:
+                                        print('object seen')
+                                        #follow any human seen
+                                        if 'Turn Left 15 Degrees' in current_detection:
+                                            movement_response = 'Turn Left 15 Degrees ~~ Target object is to the left ~~ '
+                                        elif 'Turn Right 15 Degrees' in current_detection:
+                                            movement_response = 'Turn Right 15 Degrees ~~ Target object is to the right ~~ '
+                                        elif 'Raise Camera Angle' in current_detection:
+                                            movement_response = 'Raise Camera Angle ~~ Target object is above ~~ '
+                                        elif 'Lower Camera Angle' in current_detection:
+                                            movement_response = 'Lower Camera Angle ~~ Target object is below ~~ '
+                                        else:
+                                            movement_response = 'No Movement ~~ Target object is straight ahead ~~ '
+                                        
+                                        break
+                                    else:
+                                        
+                                        yolo_look_index += 1
+                                        if yolo_look_index >= len(yolo_detections):
+                                            movement_response = 'No Movement ~~ Target object lost ~~ '
+                                            yolo_look = False
+                                            yolo_find = True
+                                            scan360 = 0
+                                            break
+                                        else:
+                                            continue
+                                except:
+                                    movement_response = 'No Movement ~~ Focus Camera On Specific Yolo Object failed. Must be detecting object first. ~~ '
+                                    yolo_look = False
+                                    yolo_find = True
+                                    scan360 = 0
+                                    break
+                        elif yolo_find == True:
+                            #check if robot sees target object with yolo
+                            yolo_nav_index = 0
+                            with open('output.txt','r') as file:
+                                yolo_detections = file.readlines()
+                            while True:
+                                try:
+                                    current_detection = yolo_detections[yolo_nav_index]
+                                    if nav_object in current_detection:
+                                        yolo_find = False
+                                        movement_response = 'No Movement ~~ Ending search for '+nav_object+'. Object has successfully been found! ~~ '
                                         break
                                     else:
                                         yolo_nav_index += 1
                                         if yolo_nav_index >= len(yolo_detections):
-                                            movement_response = 'No Movement ~~ Target object lost ~~ '
-                                            yolo_nav = False
+                                            
                                             break
                                         else:
                                             continue
-                            except:
-                                movement_response = 'No Movement ~~ Yolo navigation failed. Must be detecting object first. ~~ '
-                                break
+                                except:
+                                    yolo_nav_index += 1
+                                    if yolo_nav_index >= len(yolo_detections):
+                                        
+                                        break
+                                    else:
+                                        continue
+                            if yolo_find == True:
+                                #do 360 scan
+                                if scan360 < 10 and scan360 > 1:
+                                    movement_response = 'Turn Right 45 Degrees ~~ Doing 360 scan for target object ~~ '
+                                    scan360 += 1
+                                elif scan360 == 0:
+                                    movement_response = 'Raise Camera Angle ~~ Doing 360 scan for target object ~~ '
+                                    scan360 += 1
+                                elif scan360 == 1:
+                                    movement_response = 'Lower Camera Angle ~~ Doing 360 scan for target object ~~ '
+                                    scan360 += 1
+                                else:
+                                    #do object avoidance
+                                    #if object not found in scan then start doing object avoidance until object is found
+                                    distance = int(read_distance_from_arduino())
+                                    print('\nDistance sensor: ')
+                                    print(str(distance)+' cm')
+                                    if distance < 40.0 and distance >= 20.0:
+                                        rando_list = [1,2]
+                                        rando_index = random.randrange(len(rando_list))
+                                        rando_num = rando_list[rando_index]
+                                        if rando_num == 1:
+                                            movement_response = 'Turn Left 45 Degrees ~~ Exploring to look for target object ~~ '
+                                        
+                                        elif rando_num == 2:
+                                            movement_response = 'Turn Right 45 Degrees ~~ Exploring to look for target object ~~ '
+                                    
+                                    elif distance < 20.0:
+                                        movement_response = 'Do A Set Of Multiple Movements ~~ Move Backward, Turn Around 180 Degrees ~~ '
+                                    else:
+                                        movement_response = 'Move Forward One Foot ~~ Exploring to look for target object ~~ '
+                            else:
+                                pass
+                        else:
+                            movement_response = str(send_text_to_gpt4_move(chat_history, per, distance, last_phrase2, person, person_data, memories, failed_response)).replace('Response Choice: ','').replace('Movement Choice at this timestamp: ','').replace('Response Choice at this timestamp: ','').replace('Attempting to do movement response choice: ','')
                     else:
-                        movement_response = str(send_text_to_gpt4_move(chat_history, per, distance, last_phrase2, task, task_steps, person, person_data, memories, failed_response)).replace('Response Choice: ','').replace('Movement Choice at this timestamp: ','').replace('Response Choice at this timestamp: ','').replace('Attempting to do movement response choice: ','')
-                        
-                    chat_history.append('Time: ' + str(the_time) + ' - Robot action response at this timestamp: ' + movement_response)  # add response to chat history                   
+                        movement_response = move_set[0] + ' ~~ Doing move from list of moves.'
+                        del move_set[0]
+                    if last_phrase2 != '':
+                        chat_history.append('Time: ' + str(the_time) + ' - ' + last_phrase2)
+                    else:
+                        pass
+                    chat_history.append('Time: ' + str(the_time) + ' - Robot response at this timestamp: ' + movement_response)  # add response to chat history                   
                     
                     try:
                         print("\nPercent:       {:3.1f}%".format(per))
                         print('\nCurrent Distance: ' + str(distance) + ' cm')
-                        print('\nCurrent Task: ' + task)
-                        print('\nTask Steps:\n'+task_steps)
                         print('\nResponse Choice: '+ movement_response.split('~~')[0].strip().replace('.',''))
                         print('\nReasoning: '+ movement_response.split('~~')[1].strip())
                         person_list = movement_response.split('~~')[2].strip().replace('.','').split(', ')
@@ -1576,8 +1666,9 @@ def movement_loop(camera, raw_capture):
                             yolo_nav = False
                         else:
                             send_data_to_arduino(["w"], arduino_address)
-                            time.sleep(0.1)
-                            send_data_to_arduino(["x"], arduino_address)
+                            if yolo_nav == False and yolo_find == False:
+                                time.sleep(0.1)
+                                send_data_to_arduino(["x"], arduino_address)
                             chat_history.append('Time: ' + str(the_time) + ' - Successfully Moved Forward 1 Inch')
                             failed_response = ''
                     elif current_response == 'moveforward1foot' or current_response == 'moveforwardonefoot':
@@ -1593,38 +1684,44 @@ def movement_loop(camera, raw_capture):
                             yolo_nav = False
                         else:
                             send_data_to_arduino(["w"], arduino_address)
-                            time.sleep(0.4)
-                            send_data_to_arduino(["x"], arduino_address)
+                            if yolo_nav == False and yolo_find == False:
+                                time.sleep(0.4)
+                                send_data_to_arduino(["x"], arduino_address)
                             chat_history.append('Time: ' + str(the_time) + ' - Successfully Moved Forward 1 Foot')
                             failed_response = ''
                     elif current_response == 'movebackward':
                         send_data_to_arduino(["s"], arduino_address)
-                        time.sleep(0.2)
-                        send_data_to_arduino(["x"], arduino_address)
+                        if yolo_nav == False and yolo_find == False:
+                            time.sleep(0.25)
+                            send_data_to_arduino(["x"], arduino_address)
                         chat_history.append('Time: ' + str(the_time) + ' - Successfully Moved Backward')
                         failed_response = ''
                     elif current_response == 'turnleft45degrees' or current_response == 'moveleft45degrees':
                         send_data_to_arduino(["a"], arduino_address)
-                        time.sleep(0.2)
-                        send_data_to_arduino(["x"], arduino_address)
+                        if yolo_nav == False and yolo_find == False:
+                            time.sleep(0.25)
+                            send_data_to_arduino(["x"], arduino_address)
                         chat_history.append('Time: ' + str(the_time) + ' - Successfully Turned Left 45 Degrees')
                         failed_response = ''
                     elif current_response == 'turnleft15degrees' or current_response == 'moveleft15degrees':
                         send_data_to_arduino(["a"], arduino_address)
-                        time.sleep(0.05)
-                        send_data_to_arduino(["x"], arduino_address)
+                        if yolo_nav == False and yolo_find == False:
+                            time.sleep(0.05)
+                            send_data_to_arduino(["x"], arduino_address)
                         chat_history.append('Time: ' + str(the_time) + ' - Successfully Turned Left 15 Degrees')
                         failed_response = ''
                     elif current_response == 'turnright45degrees' or current_response == 'moveright45degrees':
                         send_data_to_arduino(["d"], arduino_address)
-                        time.sleep(0.2)
-                        send_data_to_arduino(["x"], arduino_address)
+                        if yolo_nav == False and yolo_find == False:
+                            time.sleep(0.25)
+                            send_data_to_arduino(["x"], arduino_address)
                         chat_history.append('Time: ' + str(the_time) + ' - Successfully Turned Right 45 Degrees')
                         failed_response = ''
                     elif current_response == 'turnright15degrees' or current_response == 'moveright15degrees':
                         send_data_to_arduino(["d"], arduino_address)
-                        time.sleep(0.05)
-                        send_data_to_arduino(["x"], arduino_address)
+                        if yolo_nav == False and yolo_find == False:
+                            time.sleep(0.05)
+                            send_data_to_arduino(["x"], arduino_address)
                         chat_history.append('Time: ' + str(the_time) + ' - Successfully Turned Right 15 Degrees')
                         failed_response = ''
                     elif current_response == 'turnaround180degrees':
@@ -1633,22 +1730,11 @@ def movement_loop(camera, raw_capture):
                         send_data_to_arduino(["x"], arduino_address)
                         chat_history.append('Time: ' + str(the_time) + ' - Successfully Turned Around 180 Degrees')
                         failed_response = ''
-                    elif current_response == 'starttask' and in_task == False:
-                        print('\nStarting Task')
-                        task_response = get_task(chat_history, last_phrase2)
-                        in_task = True
-                        task = task_response.split('~~')[0].strip()
-                        task_steps = task_response.split('~~')[1].strip()
-                    elif current_response == 'endtask' and in_task == True:
-                        in_task = False
-                        print('\nEnding Task')
-                        task = 'No task is currently set.'
-                        task_steps = ''
-                    elif current_response == 'markoffacompletedtaskstep' and in_task == True:
-                        print('Marking off a completed task step')
-                        step_response = mark_off_a_completed_step(chat_history, last_phrase2, task, task_steps).split('~~')[0]
-                        current_step = mark_off_a_completed_step(chat_history, last_phrase2, task, task_steps).split('~~')[1]
-                        task_steps = task_steps.replace(step_response.strip(),'STEP IS COMPLETE: '+step_response.strip()).replace(current_step.strip(),'CURRENT STEP: '+current_step.strip())
+                    elif current_response == 'doasetofmultiplemovements':
+                        move_set = movement_response.split('~~')[1].strip().split(', ')
+                        chat_history.append('Time: ' + str(the_time) + ' - Initiating this set of moves: '+movement_response.split('~~')[1].strip())
+                        failed_response = ''
+
                     elif current_response == 'raisecameraangle':
                         if camera_vertical_pos == 'up':
                             chat_history.append('Time: ' + str(the_time) + ' - Raise Camera Angle Failed: Camera angle is already raised as much as possible. You cannot choose Raise Camera Angle right now.')
@@ -1680,10 +1766,14 @@ def movement_loop(camera, raw_capture):
                                 camera_vertical_pos = 'middle'
                                 chat_history.append('Time: ' + str(the_time) + ' - Successfully Raised the Camera Angle to the middle upwards angle.')
                     elif current_response == 'endconversation' or current_response == 'goodbye':
-                        with open('playback_test.txt', 'w') as f:
-                            f.write('Good bye!')
+                        with open('playback_text.txt', 'w') as f:
+                            f.write(movement_response.split('~~')[1].strip())
+                    
                         last_time = time.time()
                         #create summary of history
+                        image_folder = 'Pictures/'  # Replace with the path to your image folder
+                        output_video = 'output_video.avi'  # Change the extension to .avi
+                        create_video_from_images(image_folder, output_video)
                         chat_summary = get_chat_summary(chat_history, memories)
                         #save to file
                         with open('memories/'+str(the_time).replace('/','-').replace(':','-').replace(' ','_')+'.txt','w+') as f:
@@ -1726,8 +1816,8 @@ def movement_loop(camera, raw_capture):
                                 else:
                                     continue
                         print('ending convo')
+                        get_memory_summary()
                         chat_history = []
-                        stop_threads = True
                         break
                     elif current_response == 'nomovement':
                         now = datetime.now()
@@ -1740,18 +1830,47 @@ def movement_loop(camera, raw_capture):
                         with open('self_response.txt','w') as f:
                             f.write(movement_response.split('~~')[1])
                     elif current_response == 'navigatetospecificyoloobject':
+                        
+                        
                         send_data_to_arduino(["1"], arduino_address)
-                        time.sleep(0.5)
+                        time.sleep(0.1)
                         send_data_to_arduino(["1"], arduino_address)
-                        time.sleep(1.5)
+                        time.sleep(0.1)
                         camera_vertical_pos = 'forward'
                         yolo_nav = True
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-                        nav_object = movement_response.split('~~')[1].split(' - ')[0]
-                        nav_distance = movement_response.split('~~')[1].split(' - ')[1]
-                        chat_history.append('Time: ' + str(the_time) + ' - Starting navigation to'+movement_response.split('~~')[1].split(' - ')[0])
-                        
+                        nav_object = movement_response.split('~~')[1]
+                        with open('playback_text.txt', 'w') as f:               
+                            f.write('Navigating to '+nav_object)
+                        chat_history.append('Time: ' + str(the_time) + ' - Starting navigation to '+movement_response.split('~~')[1])
+                    elif current_response == 'focuscameraonspecificyoloobject':
+                        send_data_to_arduino(["1"], arduino_address)
+                        time.sleep(0.1)
+                        send_data_to_arduino(["1"], arduino_address)
+                        time.sleep(0.1)
+                        camera_vertical_pos = 'forward'
+                        yolo_look = True
+                        now = datetime.now()
+                        the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                        look_object = movement_response.split('~~')[1]
+                        with open('playback_text.txt', 'w') as f:               
+                            f.write('Starting to look at '+look_object)
+                        chat_history.append('Time: ' + str(the_time) + ' - Starting to look at '+look_object)
+                    elif current_response == 'findunseenyoloobject':
+                        send_data_to_arduino(["1"], arduino_address)
+                        time.sleep(0.1)
+                        send_data_to_arduino(["1"], arduino_address)
+                        time.sleep(0.1)
+                        camera_vertical_pos = 'forward'
+                        now = datetime.now()
+                        the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                        yolo_find = True
+                        scan360 = 0
+                        nav_object = movement_response.split('~~')[1]
+                        with open('playback_text.txt', 'w') as f:
+                            f.write('Looking for '+nav_object)
+                        chat_history.append('Time: ' + str(the_time) + ' - Starting to explore around to look for '+movement_response.split('~~')[1])
                     else:
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
@@ -1769,7 +1888,6 @@ def movement_loop(camera, raw_capture):
         except:
             print(traceback.format_exc())
             
-        time.sleep(0.1)
 if __name__ == "__main__":
     try:
         be_still = True
@@ -1778,7 +1896,7 @@ if __name__ == "__main__":
         transcribe_thread.start() 
         camera = PiCamera()
         raw_capture = PiRGBArray(camera)
-        camera.resolution = (416, 416)
+        camera.resolution = (320, 320)
         camera.framerate = 10
         time.sleep(1)
 
@@ -1800,7 +1918,6 @@ if __name__ == "__main__":
             with open('batt_per.txt','w+') as file:
                 file.write(str(per))
             chat_history = []
-            stop_threads = False
             frame = capture_image(camera, raw_capture)
             cv2.imwrite('this_temp.jpg', frame)
             last_phrase = get_last_phrase()
@@ -1815,10 +1932,8 @@ if __name__ == "__main__":
 
                 print("Name heard, initializing...")
                 #do yolo and gpt visual threads
+                yolo_detect()
 
-                yolo_thread = threading.Thread(target=yolo_detect)
-                yolo_thread.start()
-                yolo_thread.join()
                 print('Saying Greeting')
                 with open('last_phrase.txt', 'w') as file:
                     file.write('')
@@ -1826,14 +1941,8 @@ if __name__ == "__main__":
                 now = datetime.now()
                 the_time = now.strftime("%m/%d/%Y %H:%M:%S")
                 print('starting thread')
-                movement_thread = threading.Thread(target=movement_loop, args=(camera, raw_capture))
-                memory_thread = threading.Thread(target=get_memory_summary)
-                memory_thread.start()
-                time.sleep(1)
-                movement_thread.start()
-                print('threads started')
-                movement_thread.join()
-                memory_thread.join()
+                movement_loop(camera, raw_capture)
+                
             else:
                 
 
@@ -1841,9 +1950,7 @@ if __name__ == "__main__":
                     pass
                 else:
                     #do yolo
-                    yolo_thread = threading.Thread(target=yolo_detect)
-                    yolo_thread.start()
-                    yolo_thread.join()
+                    yolo_detect()
                     with open('output.txt','r') as file:
                         yolo_detections = file.readlines()
                     print("YOLO Detections:")
