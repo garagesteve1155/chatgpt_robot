@@ -1,7 +1,6 @@
 import re
 import subprocess
 import os
-import webrtcvad
 import numpy as np
 import time
 import requests
@@ -13,32 +12,24 @@ from datetime import datetime
 from picamera import PiCamera
 from picamera.array import PiRGBArray
 import base64
-import signal
 import traceback
 import random
-from queue import Queue
 from vosk import Model, KaldiRecognizer
 import pyaudio
 import json
 
-# Initialize Vosk model and recognizer
-vosk_model = Model("/path/to/vosk-model")
-recognizer = KaldiRecognizer(vosk_model, RATE)
-# Create a queue to share the boxes and class IDs between threads
-yolo_data_queue = Queue()
 
-# Initialize the recognizer and VAD with the highest aggressiveness setting
-vad = webrtcvad.Vad(3)  # Highest sensitivity
-print("Initialized recognizer and VAD.")
+
 # Audio stream parameters
 CHUNK = 320  # 20 ms of audio at 16000 Hz
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 16000
 SAMPLE_WIDTH = pyaudio.PyAudio().get_sample_size(FORMAT)
-def timeout_handler(signum, frame):
-    raise TimeoutError("Operation timed out")
 
+# Initialize Vosk model and recognizer
+vosk_model = Model("/path/to/vosk-model")
+recognizer = KaldiRecognizer(vosk_model, RATE)
 
 p = pyaudio.PyAudio()
 is_transcribing = False  # Global flag to control microphone input
@@ -273,10 +264,7 @@ def remove_overlapping_boxes(boxes, class_ids, confidences):
 # 6. YOLO Detection Function with Distance Estimation
 # -----------------------------------
 
-import time
-import cv2
-import numpy as np
-from datetime import datetime
+
 
 def yolo_detect():
     global chat_history
@@ -346,7 +334,6 @@ def yolo_detect():
         start = time.time()
         boxes, class_ids, confidences = remove_overlapping_boxes(boxes, class_ids, confidences)
         time_logs['Remove Overlapping Boxes'] = time.time() - start
-        yolo_data_queue.put((boxes, class_ids))
         # Annotate image and generate descriptions
         start = time.time()
         descriptions = []
@@ -465,38 +452,7 @@ def handle_playback(stream):
     return False
 
 
-def filter_low_volume(audio_data):
-    audio_np = np.frombuffer(audio_data, dtype=np.int16)
-    the_list.append(np.max(np.abs(audio_np)))
-    if len(the_list) > 1000:
-        del the_list[0]
-    the_average = int(sum(the_list) / len(the_list))
-    the_average = the_average + (the_average * 0.17)
-    if np.max(np.abs(audio_np)) < the_average:
-        return b'\0' * len(audio_data)
-    return audio_data
 
-def process_audio_data(data_buffer, recognizer, sample_width):
-    if data_buffer:
-        full_audio_data = b''.join(data_buffer)
-        
-        audio = sr.AudioData(full_audio_data, RATE, sample_width)
-        try:
-            text = recognizer.recognize_google(audio)
-          
-            if text.strip().lower().replace(' ','') != '':
-                file = open('last_phrase.txt', 'w+')
-                file.write(text)
-                file.close()
-
-                file = open('playback_text.txt', 'w+')
-                file.close()
-                file = open('self_response.txt', 'w+')
-                file.close()
-            else:
-                pass
-        except Exception as e:
-            print(e)
 
 def listen_and_transcribe():
     global is_transcribing
@@ -523,8 +479,8 @@ def listen_and_transcribe():
                 partial_result = recognizer.PartialResult()
                 print("Partial result:", json.loads(partial_result).get("partial", ""))
 
-        if handle_playback(stream):  # Pauses transcription during playback
-            continue
+        else:
+            handle_playback(stream)
 
     # Clean up stream
     stream.stop_stream()
