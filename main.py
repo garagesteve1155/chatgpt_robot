@@ -9,15 +9,13 @@ import bluetooth
 import cv2
 import smbus
 from datetime import datetime
-from picamera import PiCamera
-from picamera.array import PiRGBArray
 import base64
 import traceback
 import random
 from vosk import Model, KaldiRecognizer
 import pyaudio
 import json
-
+from picamera2 import Picamera2
 
 
 # Audio stream parameters
@@ -302,7 +300,7 @@ def yolo_detect():
 
         # Prepare the image for YOLO
         start = time.time()
-        blob = cv2.dnn.blobFromImage(img, 0.00392, (320, 320), (0, 0, 0), True, crop=False)
+        blob = cv2.dnn.blobFromImage(img, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
         net.setInput(blob)
         outs = net.forward(output_layers)
         time_logs['YOLO Forward'] = time.time() - start
@@ -781,11 +779,11 @@ except:
     file = open('key.txt','w+')
     file.write(api_key)
     file.close()
-def capture_image(camera, raw_capture):
-    raw_capture.truncate(0)
-    camera.capture(raw_capture, format="bgr")
-    image = raw_capture.array
-    return image
+def capture_image(camera):
+    """
+    Captures an image using picamera2 and returns it as a NumPy array.
+    """
+    return camera.capture_array()
 
 
 def send_text_to_gpt4_move(history,percent, current_distance, phrase, user_name, user_data, mems, failed):
@@ -1274,7 +1272,7 @@ def movement_loop(camera, raw_capture):
                 pass
 
             try:
-                frame = capture_image(camera, raw_capture)
+                frame = capture_image(camera)
                 cv2.imwrite('this_temp.jpg', frame)
             except:
                 print(traceback.format_exc())
@@ -1833,10 +1831,10 @@ if __name__ == "__main__":
         last_time_seen = time.time()
         transcribe_thread = threading.Thread(target=listen_and_transcribe)  # Adding the transcription thread
         transcribe_thread.start() 
-        camera = PiCamera()
-        raw_capture = PiRGBArray(camera)
-        camera.resolution = (320, 320)
-        camera.framerate = 10
+        camera = Picamera2()
+        camera_config = camera.create_still_configuration(main={"size": (416, 416)})
+        camera.configure(camera_config)
+        camera.start()
         time.sleep(1)
 
         send_data_to_arduino(["4"], arduino_address)
@@ -1857,7 +1855,7 @@ if __name__ == "__main__":
             with open('batt_per.txt','w+') as file:
                 file.write(str(per))
             chat_history = []
-            frame = capture_image(camera, raw_capture)
+            frame = capture_image(camera)
             cv2.imwrite('this_temp.jpg', frame)
             last_phrase = get_last_phrase()
             
