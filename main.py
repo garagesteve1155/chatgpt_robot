@@ -33,582 +33,8 @@ def clear_files_in_folder(folder_path):
 # Example usage
 folder_path = 'Pictures/'
 clear_files_in_folder(folder_path)
-grid_map = None
 move_set = []
 camera_horizontal_fov = 160.0
-def get_relative_position_and_degree(robot_orientation, dx, dy, fov=160):
-    """
-    Determines the relative position and degree from the robot to an object based on orientation.
-
-    Parameters:
-    - robot_orientation (float): Robot's current orientation in degrees (0-359), where 0° is front.
-    - dx (int): Difference in x-coordinate (object_x - robot_x).
-    - dy (int): Difference in y-coordinate (object_y - robot_y).
-    - fov (float): Field of view in degrees (default is 160°).
-
-    Returns:
-    - tuple:
-        - str: Relative position (e.g., 'in front of you', 'behind you', 'to your left').
-        - float: Degree relative to the center of vision (0° is directly in front).
-        - bool: True if within field of view, False otherwise.
-    """
-    if dx == 0 and dy == 0:
-        return ("Here", 0.0, True)
-
-    # Calculate the absolute angle from robot to the object
-    # Shift angle by 180 degrees to set 0 degrees as front
-    angle = (math.degrees(math.atan2(dx, dy)) - robot_orientation + 180) % 360
-
-    # Calculate relative degree
-    relative_degree = angle if angle <= 180 else angle - 360  # Range: -180° to +180°
-
-    # Determine relative position based on relative_degree
-    if -22.5 < relative_degree <= 22.5:
-        position = "in front of you"
-    elif 22.5 < relative_degree <= 67.5:
-        position = "to your front-right"
-    elif 67.5 < relative_degree <= 112.5:
-        position = "to your right"
-    elif 112.5 < relative_degree <= 157.5:
-        position = "to your back-right"
-    elif 157.5 < relative_degree <= 180 or -180 <= relative_degree <= -157.5:
-        position = "behind you"
-    elif -157.5 < relative_degree <= -112.5:
-        position = "to your back-left"
-    elif -112.5 < relative_degree <= -67.5:
-        position = "to your left"
-    elif -67.5 < relative_degree <= -22.5:
-        position = "to your front-left"
-    else:
-        position = "unknown position"
-
-    # Determine if within field of view
-    half_fov = fov / 2
-    in_vision = abs(relative_degree) <= half_fov
-
-    return (position, relative_degree, in_vision)
-
-class GridMap:
-    def __init__(self, cell_size=10):
-        self.cell_size = cell_size
-        self.grid = {}
-        self.robot_position = (0.0, 0.0)
-        self.robot_orientation = 0.0
-        self.objects = {}
-        self.landmark_observations = {}
-        self.object_labels = {}
-        self.last_update_time = time.time()
-        self.previous_distance_cm = None
-    def update_robot_position(self, movement_command=None):
-        """
-        Update the robot's position based on the movement command.
-        Maintains floating-point precision for accurate mapping.
-        """
-        if movement_command:
-            self._update_position_from_command(movement_command)
-            print(f"Robot moved. New position: {self.robot_position}, Orientation: {self.robot_orientation}")
-
-    def _update_position_from_command(self, movement_command):
-        """
-        Update the robot's position and orientation based on the movement command.
-        Maintains floating-point precision for accurate mapping.
-        """
-        # Save the old position before updating
-        old_position = self.robot_position
-        orientation = self.robot_orientation
-
-        # Handle turning commands
-        if movement_command in ['Turn Left 15 Degrees', 'Turn Left 45 Degrees']:
-            angle = float(movement_command.split()[2])
-            self.robot_orientation = (self.robot_orientation - angle) % 360
-        elif movement_command in ['Turn Right 15 Degrees', 'Turn Right 45 Degrees']:
-            angle = float(movement_command.split()[2])
-            self.robot_orientation = (self.robot_orientation + angle) % 360
-        elif movement_command == 'Turn Around 180 Degrees':
-            self.robot_orientation = (self.robot_orientation + 180.0) % 360
-
-        # Handle movement commands
-        elif movement_command in [
-            'Move Forward One Foot', 'Move Forward 1 Foot',
-            'Move Forward One Inch', 'Move Forward 1 Inch'
-        ]:
-            try:
-                with open('current_distance.txt', 'r') as f:
-                    current_distance = float(f.read())
-                with open('last_distance.txt', 'r') as f:
-                    last_distance = float(f.read())
-                # Calculate distance moved
-                distance_moved_cm = last_distance - current_distance
-                if distance_moved_cm < 0.0:
-                    distance_moved_cm = 0.0
-                print('Last Distance: ' + str(last_distance))
-                print('Current Distance: ' + str(current_distance))
-                print('Distance Moved: ' + str(distance_moved_cm))
-            except Exception as e:
-                print(f"Error reading distance files: {e}")
-                distance_moved_cm = 0.0  # Default to 0 cm if there's an error
-
-            angle_rad = math.radians(self.robot_orientation)
-            dx = distance_moved_cm * math.sin(angle_rad)
-            dy = -distance_moved_cm * math.cos(angle_rad)
-            self.robot_position = (
-                self.robot_position[0] + dx,
-                self.robot_position[1] + dy
-            )
-        elif movement_command == 'Move Backward':
-            try:
-                with open('current_distance.txt', 'r') as f:
-                    current_distance = float(f.read())
-                with open('last_distance.txt', 'r') as f:
-                    last_distance = float(f.read())
-                # Calculate distance moved
-                distance_moved_cm = current_distance - last_distance
-                if distance_moved_cm < 0.0:
-                    distance_moved_cm = 0.0
-                print('Last Distance: ' + str(last_distance))
-                print('Current Distance: ' + str(current_distance))
-                print('Distance Moved: ' + str(distance_moved_cm))
-            except Exception as e:
-                print(f"Error reading distance files: {e}")
-                distance_moved_cm = 0.0  # Default to 0 cm if there's an error
-
-            angle_rad = math.radians(self.robot_orientation)
-            dx = -distance_moved_cm * math.sin(angle_rad)
-            dy = distance_moved_cm * math.cos(angle_rad)
-            self.robot_position = (
-                self.robot_position[0] + dx,
-                self.robot_position[1] + dy
-            )
-        else:
-            pass
-
-        # After updating the position, clear any obstacle cells along the path
-        # Convert positions from cm to cell indices
-        old_cell_x = int(math.floor(old_position[0] / self.cell_size))
-        old_cell_y = int(math.floor(old_position[1] / self.cell_size))
-        new_cell_x = int(math.floor(self.robot_position[0] / self.cell_size))
-        new_cell_y = int(math.floor(self.robot_position[1] / self.cell_size))
-
-        # Get the line of cells between the old and new positions
-        line_cells = self.get_line((old_cell_x, old_cell_y), (new_cell_x, new_cell_y))
-
-        for cell in line_cells:
-            cell_data = self.grid.get(cell)
-            if cell_data and cell_data.get('obstacle', False):
-                # Clear the obstacle data
-                cell_data['obstacle'] = False
-                cell_data.pop('last_seen', None)
-                cell_data.pop('distance_cm', None)
-                cell_data.pop('observation_count', None)
-                print(f"Cleared obstacle at {cell} as robot moved through it.")
-
-
-
-    def get_line(self, start, end):
-        """
-        Bresenham's Line Algorithm to get all cells between start and end.
-
-        Parameters:
-        - start (tuple): Starting cell (x, y).
-        - end (tuple): Ending cell (x, y).
-
-        Returns:
-        - list: List of cells (x, y) along the line from start to end.
-        """
-        x1, y1 = start
-        x2, y2 = end
-        cells = []
-
-        dx = x2 - x1
-        dy = y2 - y1
-
-        x = x1
-        y = y1
-
-        is_steep = abs(dy) > abs(dx)
-
-        if is_steep:
-            x, y = y, x
-            dx, dy = dy, dx
-
-        swapped = False
-        if dx < 0:
-            dx = -dx
-            dy = -dy
-            x, y, x2, y2 = x2, y2, x, y
-            swapped = True
-
-        D = 2 * abs(dy) - abs(dx)
-        y_step = 1 if dy >= 0 else -1
-
-        for _ in range(abs(dx) + 1):
-            coord = (y, x) if is_steep else (x, y)
-            cells.append(coord)
-            if D >= 0:
-                y += y_step
-                D -= 2 * abs(dx)
-            D += 2 * abs(dy)
-            x += 1
-
-        if swapped:
-            cells.reverse()
-
-        return cells
-
-
-
-
-
-    def get_direction_delta(self):
-        # Convert orientation to a direction vector without rounding
-        angle_rad = math.radians(self.robot_orientation)
-        dx = math.sin(angle_rad)
-        dy = -math.cos(angle_rad)
-        return dx, dy
-
-
-
-    def get_direction_symbol(self):
-        orientation = self.robot_orientation % 360  # Ensure orientation is within 0-359°
-        
-        if 337.5 <= orientation or orientation < 22.5:
-            return '↑'  # North
-        elif 22.5 <= orientation < 67.5:
-            return '↗'  # Northeast
-        elif 67.5 <= orientation < 112.5:
-            return '→'  # East
-        elif 112.5 <= orientation < 157.5:
-            return '↘'  # Southeast
-        elif 157.5 <= orientation < 202.5:
-            return '↓'  # South
-        elif 202.5 <= orientation < 247.5:
-            return '↙'  # Southwest
-        elif 247.5 <= orientation < 292.5:
-            return '←'  # West
-        elif 292.5 <= orientation < 337.5:
-            return '↖'  # Northwest
-        # Removed the else clause to prevent returning 'R'
-
-
-    def get_map_description(self, size=10, fov=160):
-        cx_cm, cy_cm = self.robot_position  # Keep as floats
-        orientation = self.robot_orientation
-
-        description = "Current Surroundings:\n"
-
-        # Convert robot position to cell indices
-        robot_cell_x = int(math.floor(cx_cm / self.cell_size))
-        robot_cell_y = int(math.floor(cy_cm / self.cell_size))
-
-        # Determine the range based on cell indices
-        min_x = robot_cell_x - size
-        max_x = robot_cell_x + size
-        min_y = robot_cell_y - size
-        max_y = robot_cell_y + size
-
-        for y in range(min_y, max_y + 1):
-            for x in range(min_x, max_x + 1):
-                if (x, y) == (robot_cell_x, robot_cell_y):
-                    continue  # Skip the robot's own position
-
-                cell = self.grid.get((x, y), {})
-                obstacle = cell.get('obstacle', False)
-                obj_label = cell.get('object', None)
-
-                if obj_label:
-                    dx = x - robot_cell_x
-                    dy = y - robot_cell_y
-                    position, degree, in_vision = get_relative_position_and_degree(orientation, dx, dy, fov)
-                    distance = math.hypot(dx, dy) * self.cell_size / 100  # Distance in meters
-                    vision_status = "within your vision" if in_vision else "out of your vision"
-                    description += f"- {obj_label.capitalize()} detected {position} ({degree:.1f}°), {vision_status}, at approximately {distance:.2f} meters.\n"
-                elif obstacle:
-                    dx = x - robot_cell_x
-                    dy = y - robot_cell_y
-                    position, degree, in_vision = get_relative_position_and_degree(orientation, dx, dy, fov)
-                    distance = math.hypot(dx, dy) * self.cell_size / 100  # Distance in meters
-                    vision_status = "within your vision" if in_vision else "out of your vision"
-                    description += f"- Obstacle detected {position} ({degree:.1f}°), {vision_status}, at approximately {distance:.2f} meters.\n"
-
-        if description == "Current Surroundings:\n":
-            description += "- No obstacles or objects detected within the bounded area.\n"
-
-        return description
-
-    def update_map_with_distance(self, distance_cm):
-        if distance_cm > 80:
-            return
-        # Get robot's current position and direction
-        x_cm, y_cm = self.robot_position
-        dx, dy = self.get_direction_delta()
-
-        # Calculate the obstacle's position in cm based on distance
-        obstacle_x_cm = x_cm + dx * distance_cm
-        obstacle_y_cm = y_cm + dy * distance_cm
-
-        # Convert obstacle and robot positions to cell indices
-        obstacle_x = int(math.floor(obstacle_x_cm / self.cell_size))
-        obstacle_y = int(math.floor(obstacle_y_cm / self.cell_size))
-        obstacle_pos = (obstacle_x, obstacle_y)
-        
-        robot_cell_x = int(math.floor(x_cm / self.cell_size))
-        robot_cell_y = int(math.floor(y_cm / self.cell_size))
-        start_cell = (robot_cell_x, robot_cell_y)
-
-        # Get cells in the line of sight to the obstacle using Bresenham's algorithm
-        los_cells = self.get_line(start_cell, obstacle_pos)
-
-        # Clear all LOS cells as free except the last one (obstacle cell)
-        for cell in los_cells[:-1]:
-            cell_x, cell_y = cell
-            cell_data = self.grid.setdefault(cell, {})
-            
-            if cell_data.get('obstacle', False):
-                print(f"Marking cell ({cell_x}, {cell_y}) as free.")
-            
-            # Reset obstacle data and observation count for non-obstacle cells
-            cell_data['obstacle'] = False
-            cell_data.pop('last_seen', None)
-            cell_data.pop('distance_cm', None)
-            cell_data.pop('observation_count', None)  # Reset observation count
-
-        # Update the actual obstacle cell based on distance
-        cell = self.grid.setdefault(obstacle_pos, {})
-        previous_distance = cell.get('distance_cm', float('inf'))
-
-        if distance_cm < previous_distance:
-            # New or closer obstacle detected; update the obstacle cell
-            cell['obstacle'] = True
-            cell['distance_cm'] = distance_cm
-            cell['last_seen'] = time.time()
-            # Increment observation count
-            cell['observation_count'] = cell.get('observation_count', 0) + 1
-            print(f"New or closer obstacle at {obstacle_pos} with distance: {distance_cm} cm. Seen {cell['observation_count']} times.")
-        elif distance_cm > previous_distance + self.cell_size:
-            # If obstacle has moved beyond the cell size, remove the marker and reset observation count
-            cell.pop('obstacle', None)
-            cell.pop('last_seen', None)
-            cell.pop('distance_cm', None)
-            cell.pop('observation_count', None)
-            self.grid.pop(obstacle_pos, None)
-            print(f"Obstacle at {obstacle_pos} removed due to increased distance reading.")
-        else:
-            # Maintain the existing obstacle if no significant distance change
-            cell['obstacle'] = True
-            cell['distance_cm'] = distance_cm
-            cell['last_seen'] = time.time()
-            # Increment observation count
-            cell['observation_count'] = cell.get('observation_count', 0) + 1
-            print(f"Maintaining obstacle at {obstacle_pos} with distance: {distance_cm} cm. Seen {cell['observation_count']} times.")
-
-    def update_map_with_yolo(self, yolo_detections):
-        """
-        Update the map with object information based on YOLO detections.
-        Objects are managed independently from obstacles.
-        """
-        current_detected_objects = set()
-
-        for detection in yolo_detections:
-            label = detection['label']
-            angle_offset = detection['angle']  # in degrees
-
-            # Calculate absolute angle relative to robot's orientation
-            total_angle = (self.robot_orientation + angle_offset) % 360
-            angle_rad = math.radians(total_angle)
-            distance = detection['distance']  # in cm
-
-            # Convert polar coordinates to grid positions
-            num_cells = distance / self.cell_size
-            nx = self.robot_position[0] + num_cells * math.sin(angle_rad)
-            ny = self.robot_position[1] - num_cells * math.cos(angle_rad)
-
-            cell_x = int(math.floor(nx))
-            cell_y = int(math.floor(ny))
-
-            # Update object in the grid
-            cell = self.grid.setdefault((cell_x, cell_y), {})
-            cell['object'] = label.capitalize()
-            cell['last_seen'] = time.time()
-            self.object_labels[(cell_x, cell_y)] = label
-
-            # Track currently detected objects
-            current_detected_objects.add((cell_x, cell_y))
-
-        # Remove objects that are no longer detected
-        known_object_positions = set(self.object_labels.keys())
-        missing_objects = known_object_positions - current_detected_objects
-
-        for pos in missing_objects:
-            if self.is_robot_directed_at(pos):
-                cell = self.grid.get(pos, {})
-                cell.pop('object', None)
-                cell.pop('last_seen', None)
-                self.object_labels.pop(pos, None)
-                print(f"Object at {pos} removed as robot is directed at it but it's no longer detected.")
-
-    def is_robot_directed_at(self, position):
-        """
-        Check if the robot is directed at the given position based on its orientation.
-        """
-        robot_x, robot_y = self.robot_position
-        pos_x, pos_y = position
-        dx = pos_x - robot_x
-        dy = pos_y - robot_y
-
-        # Calculate angle to the position
-        angle_to_pos = (math.degrees(math.atan2(dx, dy)) - self.robot_orientation + 360) % 360
-
-        # Define a narrow angle range to consider as "directed at"
-        directed_threshold = 10  # degrees
-        return abs(angle_to_pos) < directed_threshold or abs(angle_to_pos - 360) < directed_threshold
-
-
-
-    def display_map(self, center=None, size=21):
-        if center is None:
-            center = self.robot_position
-        cx_cm, cy_cm = center
-
-        # Convert center from cm to cell indices
-        robot_cell_x = int(math.floor(cx_cm / self.cell_size))
-        robot_cell_y = int(math.floor(cy_cm / self.cell_size))
-
-        # Define the size of each cell in pixels for visualization
-        cell_size_px = 20
-        map_size_px = cell_size_px * size  # e.g., 21 cells * 20 pixels = 420 pixels
-        map_image = np.ones((map_size_px, map_size_px, 3), dtype=np.uint8) * 255  # White background
-
-        # Calculate the offset to center the map around the robot
-        half_size = size // 2
-        offset_x = robot_cell_x - half_size
-        offset_y = robot_cell_y - half_size
-
-        for y in range(size):
-            for x in range(size):
-                map_x = offset_x + x
-                map_y = offset_y + y
-                cell_top_left = (x * cell_size_px, y * cell_size_px)
-                cell_bottom_right = ((x + 1) * cell_size_px, (y + 1) * cell_size_px)
-
-                if (map_x, map_y) == (robot_cell_x, robot_cell_y):
-                    # Draw the robot with an arrow indicating orientation
-                    center_position = (int((x + 0.5) * cell_size_px), int((y + 0.5) * cell_size_px))
-                    angle_rad = math.radians(self.robot_orientation)
-                    arrow_length = cell_size_px // 2
-                    end_point = (
-                        int(center_position[0] + arrow_length * math.sin(angle_rad)),
-                        int(center_position[1] - arrow_length * math.cos(angle_rad))
-                    )
-                    cv2.arrowedLine(
-                        map_image, center_position, end_point,
-                        (0, 0, 255), 2, tipLength=0.4
-                    )
-                    # Optionally, label the robot's position
-                    cv2.putText(
-                        map_image, "R", 
-                        (center_position[0] - 5, center_position[1] + 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2
-                    )
-                else:
-                    cell = self.grid.get((map_x, map_y), {})
-                    obj_label = cell.get('object', None)
-                    obstacle = cell.get('obstacle', False)
-                    observation_count = cell.get('observation_count', 0)
-
-                    if obj_label:
-                        # Draw the object as a colored circle
-                        center_position = (
-                            int((x + 0.5) * cell_size_px),
-                            int((y + 0.5) * cell_size_px)
-                        )
-                        cv2.circle(
-                            map_image, center_position,
-                            cell_size_px // 4, (0, 255, 0), -1
-                        )
-                        # Center the text within the cell
-                        text_size, _ = cv2.getTextSize(obj_label[0].upper(), cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
-                        text_x = cell_top_left[0] + (cell_size_px - text_size[0]) // 2
-                        text_y = cell_top_left[1] + (cell_size_px + text_size[1]) // 2
-                        cv2.putText(
-                            map_image, obj_label[0].upper(), (text_x, text_y),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2
-                        )
-                    elif obstacle:
-                        count = observation_count
-                        if count >= 3:
-                            grayscale_value = 0    # Black
-                        elif count == 2:
-                            grayscale_value = 100  # Dark gray
-                        elif count == 1:
-                            grayscale_value = 200  # Very light gray
-                        else:
-                            grayscale_value = 255  # Default to white if count is zero
-
-                        color = (grayscale_value, grayscale_value, grayscale_value)
-
-                        # Draw the obstacle as a filled rectangle with the calculated color
-                        cv2.rectangle(
-                            map_image, cell_top_left, cell_bottom_right,
-                            color, -1
-                        )
-        # Draw vertical grid lines within the map boundaries
-        for x in range(0, map_size_px + 1, cell_size_px):
-            cv2.line(
-                map_image, (x, 0), (x, map_size_px),
-                (200, 200, 200), 1  # Light gray color
-            )
-
-        # Draw horizontal grid lines within the map boundaries
-        for y in range(0, map_size_px + 1, cell_size_px):
-            cv2.line(
-                map_image, (0, y), (map_size_px, y),
-                (200, 200, 200), 1  # Light gray color
-            )
-
-        # Draw a border around the map to define boundaries
-        cv2.rectangle(
-            map_image, (0, 0), (map_size_px - 1, map_size_px - 1),
-            (150, 150, 150), 2  # Slightly darker gray for border
-        )
-
-        # Display the map using OpenCV
-        cv2.imshow("Grid Map with Fading Obstacles", map_image)
-        cv2.waitKey(1)  # Allow the display to update
-
-
-
-
-
-
-
-
-def continuous_map_display(grid_map, interval=1):
-    """
-    Continuously displays the map at a set interval.
-    
-    Parameters:
-    - grid_map: The GridMap instance to display.
-    - interval: Time in seconds between each map refresh.
-    """
-    while True:
-        grid_map.display_map()
-        time.sleep(interval)
-
-
-def mapping_function(distance_cm):
-    global grid_map
-
-    # Read YOLO detections from output.txt
-    yolo_detections = parse_yolo_detections_from_file('output.txt')
-
-    # Update the map with sensor data
-    grid_map.update_map_with_distance(distance_cm)
-    # grid_map.update_map_with_yolo(yolo_detections)  # Uncomment if needed
-
-
-
-
-
 
 
 # Initialize the recognizer and VAD with the highest aggressiveness setting
@@ -636,9 +62,6 @@ file = open('last_phrase.txt','w+')
 file.write('')
 file.close()
 file = open('last_phrase2.txt','w+')
-file.write('')
-file.close()
-file = open('self_response.txt','w+')
 file.write('')
 file.close()
 
@@ -762,7 +185,7 @@ def estimate_distance(focal_length, real_height, pixel_height):
 
 def get_position_description(x, y, width, height):
     """
-    Return a text description of the position based on coordinates in a 5x3 grid.
+    Return a text description of the position based on coordinates in a 5x5 grid.
     
     Parameters:
     - x (float): X-coordinate of the object's center in the image.
@@ -773,7 +196,7 @@ def get_position_description(x, y, width, height):
     Returns:
     - str: Description of the object's position.
     """
-    # Determine horizontal position in the 5 sections
+    # Determine horizontal position in 5 sections
     if x < width / 5:
         horizontal = "Turn Left 45 Degrees"
     elif x < 2 * width / 5:
@@ -785,13 +208,17 @@ def get_position_description(x, y, width, height):
     else:
         horizontal = "Turn Right 45 Degrees"
     
-    # Determine vertical position in the 3 sections
-    if y < height / 3:
+    # Determine vertical position in 5 sections
+    if y < height / 5:
         vertical = "Raise Camera Angle"
-    elif y > 2 * height / 3:
+    elif y < 2 * height / 5:
+        vertical = "Raise Camera Angle"
+    elif y < 3 * height / 5:
+        vertical = "already centered on the vertical"
+    elif y < 4 * height / 5:
         vertical = "Lower Camera Angle"
     else:
-        vertical = "already centered on the vertical"
+        vertical = "Lower Camera Angle"
     
     # Combine the horizontal and vertical descriptions
     if horizontal == "already centered between left and right" and vertical == "already centered on the vertical":
@@ -801,6 +228,8 @@ def get_position_description(x, y, width, height):
 
 
 
+with open("last_phrase2.txt","w+") as f:
+    f.write('')
 # -----------------------------------
 # 5. Overlap Removal Function
 # -----------------------------------
@@ -870,12 +299,6 @@ def yolo_detect():
     Perform YOLO object detection on an image, estimate distances to detected objects,
     and update chat history with descriptive information.
     
-    Parameters:
-    - net (cv2.dnn_Net): Pre-loaded YOLO network.
-    - output_layers (list): List of output layer names for YOLO.
-    - classes (list): List of class names corresponding to COCO dataset.
-    - chat_history (list): List to store chat history for logging.
-    
     Returns:
     - None
     """
@@ -916,7 +339,7 @@ def yolo_detect():
                 scores = detection[5:]
                 class_id = np.argmax(scores)
                 confidence = scores[class_id]
-                if confidence > 0.33:
+                if confidence > 0.35:
                     center_x = int(detection[0] * width)
                     center_y = int(detection[1] * height)
                     w = int(detection[2] * width)
@@ -932,9 +355,18 @@ def yolo_detect():
         start = time.time()
         boxes, class_ids, confidences = remove_overlapping_boxes(boxes, class_ids, confidences)
         time_logs['Remove Overlapping Boxes'] = time.time() - start
+
         # Annotate image and generate descriptions
         start = time.time()
         descriptions = []
+
+        # Define center grid rectangle
+        center_x_min = 2 * width / 5
+        center_x_max = 3 * width / 5
+        center_y_min = height / 3
+        center_y_max = 2 * height / 3
+        center_grid_area = (center_x_max - center_x_min) * (center_y_max - center_y_min)
+
         for i in range(len(boxes)):
             x, y, w, h = boxes[i]
             label = str(classes[class_ids[i]]).lower()
@@ -950,8 +382,36 @@ def yolo_detect():
                 print(f"Warning: Real-world height for class '{label}' not found. Using default height.")
                 real_height = default_height
 
-            # Estimate distance
-            distance = estimate_distance(focal_length_px, real_height, h)
+            # Calculate the percentage of the center grid covered by the bounding box
+            # Bounding box coordinates
+            box_x_min = x
+            box_y_min = y
+            box_x_max = x + w
+            box_y_max = y + h
+
+            # Compute intersection with center grid
+            inter_x_min = max(box_x_min, center_x_min)
+            inter_y_min = max(box_y_min, center_y_min)
+            inter_x_max = min(box_x_max, center_x_max)
+            inter_y_max = min(box_y_max, center_y_max)
+
+            inter_area = max(0, inter_x_max - inter_x_min) * max(0, inter_y_max - inter_y_min)
+
+            # Calculate percentage of center grid covered by bounding box
+            percentage_covered = (inter_area / center_grid_area) * 100
+
+            if percentage_covered > 30:
+                # Read distance from current_distance.txt
+                try:
+                    with open('current_distance.txt', 'r') as f:
+                        distance = float(f.read())/100.0
+                except Exception as e:
+                    print(f"Error reading current_distance.txt: {e}")
+                    # Fall back to estimating distance
+                    distance = estimate_distance(focal_length_px, real_height, h)
+            else:
+                # Estimate distance
+                distance = estimate_distance(focal_length_px, real_height, h)
 
             # Generate and collect descriptions with distance
             pos_desc = get_position_description(x + w/2, y + h/2, width, height)
@@ -1000,6 +460,9 @@ def yolo_detect():
 
     except Exception as e:
         print(f"Error in yolo_detect: {e}")
+
+
+
 
 
 def parse_yolo_detections_from_file(filename):
@@ -1052,153 +515,27 @@ def parse_detection_sentence(sentence):
         print(f"Error parsing detection sentence: {e}")
         return None
 
-def route_to_object(target_label):
-    global grid_map, move_set, yolo_find, nav_object, yolo_nav, scan360
-
-    # Check if the object exists on the map
-    if target_label in grid_map.objects and grid_map.objects[target_label]:
-        # Object exists on the map, proceed to create a route
-        target_position = grid_map.objects[target_label][-1]['position']
-
-        # A* pathfinding to find a path to the target position
-        path = astar_and_convert_to_commands(grid_map.robot_position, target_position)
-
-        if path:
-            move_set = path
-            print(f"Route to '{target_label}' created with commands: {path}")
-        else:
-            print(f"No path found to '{target_label}'. Initiating YOLO find behavior.")
-            yolo_find = True
-            yolo_nav = False
-            nav_object = target_label
-            scan360 = 0
-    else:
-        # Object does not exist on the map, do not create a route
-        print(f"Object '{target_label}' does not exist on the map. Route creation skipped.")
-        # Optionally, you can initiate a search behavior here
-        yolo_find = True
-        yolo_nav = False
-        nav_object = target_label
-        scan360 = 0
 
 
-def astar_and_convert_to_commands(start, goal):
-    grid = grid_map.grid
-    size = grid_map.cell_size
-    robot_orientation = grid_map.robot_orientation
-
-    # A* pathfinding
-    open_set = []
-    heapq.heappush(open_set, (0, start))
-    came_from = {}
-    cost_so_far = {}
-    came_from[start] = None
-    cost_so_far[start] = 0
-
-    while open_set:
-        _, current = heapq.heappop(open_set)
-
-        if current == goal:
-            break
-
-        x, y = current
-        neighbors = []
-        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            nx = x + dx
-            ny = y + dy
-            if grid.get((nx, ny), 0) != -1:
-                neighbors.append((nx, ny))
-
-        for next_node in neighbors:
-            new_cost = cost_so_far[current] + 1
-            if next_node not in cost_so_far or new_cost < cost_so_far[next_node]:
-                cost_so_far[next_node] = new_cost
-                priority = new_cost + abs(goal[0] - next_node[0]) + abs(goal[1] - next_node[1])
-                heapq.heappush(open_set, (priority, next_node))
-                came_from[next_node] = current
-
-    # Reconstruct path
-    current = goal
-    path = []
-    while current != start:
-        if current is None:
-            return []
-        path.append(current)
-        current = came_from[current]
-    path.reverse()
-
-    # Convert path to movement commands
-    commands = []
-    for i in range(1, len(path)):
-        current_node = path[i - 1]
-        next_node = path[i]
-        dx = next_node[0] - current_node[0]
-        dy = next_node[1] - current_node[1]
-
-        # Determine desired orientation
-        if dx == 1 and dy == 0:
-            desired_orientation = 90
-        elif dx == -1 and dy == 0:
-            desired_orientation = 270
-        elif dx == 0 and dy == -1:
-            desired_orientation = 0
-        elif dx == 0 and dy == 1:
-            desired_orientation = 180
-        else:
-            continue  # Skip invalid movements
-
-        # Calculate rotation needed
-        rotation = (desired_orientation - robot_orientation + 360) % 360
-
-        # Generate rotation commands
-        if rotation != 0:
-            if rotation > 180:
-                # Turn left
-                rotation = 360 - rotation
-                while rotation >= 45:
-                    commands.append('Turn Left 45 Degrees')
-                    robot_orientation = (robot_orientation - 45) % 360
-                    rotation -= 45
-                while rotation >= 15:
-                    commands.append('Turn Left 15 Degrees')
-                    robot_orientation = (robot_orientation - 15) % 360
-                    rotation -= 15
-            else:
-                # Turn right
-                while rotation >= 45:
-                    commands.append('Turn Right 45 Degrees')
-                    robot_orientation = (robot_orientation + 45) % 360
-                    rotation -= 45
-                while rotation >= 15:
-                    commands.append('Turn Right 15 Degrees')
-                    robot_orientation = (robot_orientation + 15) % 360
-                    rotation -= 15
-
-        # Move forward
-        commands.append('Move Forward One Foot')
-        grid_map.robot_orientation = robot_orientation
-        
 
 
-    return commands
 
 
 
 
 
 def get_wm8960_card_number():
-    print("Finding WM8960 Audio HAT card number...")
+    print("Finding USB Audio Device card number...")
     result = subprocess.run(["aplay", "-l"], stdout=subprocess.PIPE, text=True)
-    match = re.search(r"card (\d+): wm8960sound", result.stdout)
+    match = re.search(r"card (\d+): Device", result.stdout)
     if match:
         card_number = match.group(1)
-        print(f"WM8960 Audio HAT found on card {card_number}")
+        print(f"USB Audio Device found on card {card_number}")
         return card_number
     else:
-        print("WM8960 Audio HAT not found.")
+        print("USB Audio Device not found.")
         return None
 def set_max_volume(card_number):
-    subprocess.run(["amixer", "-c", card_number, "sset", 'Headphone', '100%'], check=True)
     subprocess.run(["amixer", "-c", card_number, "sset", 'Speaker', '100%'], check=True)
 # Get the correct sound device for the WM8960 sound card
 wm8960_card_number = get_wm8960_card_number()
@@ -1258,8 +595,6 @@ def process_audio_data(data_buffer, recognizer, sample_width):
 
                 file = open('playback_text.txt', 'w+')
                 file.close()
-                file = open('self_response.txt', 'w+')
-                file.close()
             else:
                 pass
         except Exception as e:
@@ -1274,20 +609,7 @@ def listen_and_transcribe():
     post_speech_buffer = 30
     speech_count = 0
     while True:
-        if speech_count == 0:
-            #check self_response file
-            with open('self_response.txt','r') as f:
-                self_response = f.read()
-            if self_response != '':
-                with open('playback_text.txt', 'w') as f:
-                    f.write(self_response)
-                file = open('self_response.txt', 'w+')
-                file.close()
-            else:
-                pass
-            #if data, add data to playback text file
-        else:
-            pass
+
         if handle_playback(stream):
             continue
         else:
@@ -1665,9 +987,10 @@ def describe_image():
         "Authorization": f"Bearer {api_key}"
     }
 
-
-
-
+    with open("last_phrase2.txt","r") as f:
+        phrase_now = f.read()
+    with open("last_phrase2.txt","w+") as f:
+        f.write('')
 
 
     # Initialize the payload with the system message with static instructions
@@ -1677,15 +1000,17 @@ def describe_image():
             # The session history will be added here as individual messages
         ],
     }
-    # 6. Generate Map Description
-    map_description = grid_map.get_map_description(size=10, fov=160)
 
+    if phrase_now != '':
+        phrase_now = 'You have just heard this from your microphone so use this as additional context for your response: ' + phrase_now
+    else:
+        pass
     # Append the dynamic data as the last user message
     payload["messages"].append({
         "role": "user",
         "content": [{
             "type": "text",
-            "text": "This image is from the front camera on a small robot. The camera is from a view of only a few inches above the ground. Please describe the scene in 3 sentences or less so the robot knows what it sees. Also, here is a description of the robot's mental map for the immediate area surrounding it so you have the correct context to figure out what the robot is seeing: " + map_description
+            "text": "This image is from the front camera on a small robot. The camera is from a view of only a few inches above the ground. Please describe the scene in 3 sentences or less so the robot knows what it sees. "+phrase_now
         },
         {
             "type": "image_url",
@@ -1726,7 +1051,7 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
 
 
 
-    response_choices = ("Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, Do A Set Of Multiple Movements, Raise Camera Angle, Lower Camera Angle, Explore Around, Find Unseen Yolo Object, Focus Camera On Specific Yolo Object, Navigate To Specific Yolo Object, Say Something, Alert User, No Movement, End Conversation, Good Bye.\n\n")
+    response_choices = ("Follow User, Say Something, Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, Do A Set Of Multiple Movements, Raise Camera Angle, Lower Camera Angle, Find Unseen Yolo Object, Focus Camera On Specific Yolo Object, Navigate To Specific Yolo Object, Alert User, No Movement, End Conversation, Good Bye.\n\n")
     if failed != '':
         response_choices = response_choices.replace(failed, '')
     else:
@@ -1741,9 +1066,7 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
             # The session history will be added here as individual messages
         ],
     }
-    # 6. Generate Map Description
-    map_description = grid_map.get_map_description(size=10, fov=160)
-    print("\n" + map_description)
+
     # Now, parse the session history and add messages accordingly
     for entry in history:
         timestamp_and_content = entry.split(" - ", 1)
@@ -1774,15 +1097,15 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
                 "content": message_content
             })
 
-    navi = 'If you are choosing Navigate To Specific Yolo Object, then use Navigate To Specific Yolo Object as your response choice, then followed by ~~ and then replace your Reasoning with the closest relevant standard yolo coco name that goes with the object (you can only put the coco name, not a whole sentence or any adjectives on the name. You can only choose from this standard list of coco objects: person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light, fire hydrant, stop sign, parking meter, bench, bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe, backpack, umbrella, handbag, tie, suitcase, frisbee, skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard, tennis racket, bottle, wine glass, cup, fork, knife, spoon, bowl, banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, chair, sofa, potted plant, bed, dining table, toilet, tv monitor, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear, hair dryer, toothbrush). The robot will automatically navigate to whichever yolo object you choose. Only choose Navigate To Specific Yolo Object if you need to move to that object. Do not choose Navigate To Specific Yolo Object if you see in the history that you have already successfully navigated to the target object. You cannot choose to navigate to a specific object if the distance to that object is less than 0.8 meters or if you recently finished navigating to that object. If the user wants you to come to them or you want to go to the user, then navigate to a person object.\n\n'
+    navi = 'If you are choosing Navigate To Specific Yolo Object, then use Navigate To Specific Yolo Object as your response choice, then followed by ~~ and then replace your Reasoning with the closest relevant standard yolo coco name that goes with the object (you can only put the coco name, not a whole sentence or any adjectives on the name. You can only choose from this standard list of coco objects: person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light, fire hydrant, stop sign, parking meter, bench, bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe, backpack, umbrella, handbag, tie, suitcase, frisbee, skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard, tennis racket, bottle, wine glass, cup, fork, knife, spoon, bowl, banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, chair, sofa, potted plant, bed, dining table, toilet, tv monitor, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear, hair dryer, toothbrush). The robot will automatically navigate to whichever yolo object you choose. You cannot choose to Navigate to an object if you just successfully navigated to it in the session history recently (Like for real, you cannot just repeatedly choose this if it was already successful. Only choose Navigate To Specific Yolo Object if you need to move to that object. Do not choose Navigate To Specific Yolo Object if you see in the history that you have already successfully navigated to the target object. You cannot choose to navigate to a specific object if the distance to that object is less than 0.6 meters or if you recently finished navigating to that object. If the user wants you to come to them or you want to go to the user, then navigate to a person object. And once, again, make sure you arent choosing to navigate to an object if you already navigated to it successfully.\n\n'
     object_focus = 'If you are choosing Focus Camera On Specific Yolo Object, then use Focus Camera On Specific Yolo Object as your response choice, then followed by ~~ and then replace your Reasoning with the closest relevant standard yolo coco name that goes with whatever type of object you are looking for (you can only put the coco name, not a whole sentence). The robot will automatically focus the camera on whichever yolo object you choose. Only choose Focus Camera On Specific Yolo Object if you need to constantly focus on that object. You can only choose to focus the camera on a yolo object that you are currently detecting. If the user wants you to look at them, then choose the person class.\n\n'
-    mapping = 'This is your mental map of the environment around you. '+str(map_description)+'\n\n'
     object_find = 'If you are choosing Find Unseen Yolo Object, then use Find Unseen Yolo Object as your response choice, then followed by ~~ and then replace your Reasoning with absolutely only the yolo coco name of the object. The robot will automatically try to find whichever yolo object you choose so you absolutely must choose an actual yolo coco object from the standard list of 80, just choose the closest standard coco yolo object to what you are looking for (you can only put the coco name, not a whole sentence. You can only choose from this list of objects: person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light, fire hydrant, stop sign, parking meter, bench, bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe, backpack, umbrella, handbag, tie, suitcase, frisbee, skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard, tennis racket, bottle, wine glass, cup, fork, knife, spoon, bowl, banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, chair, sofa, potted plant, bed, dining table, toilet, tv monitor, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear, hair dryer, toothbrush). Only choose Find Unseen Yolo Object if you need to find an object that you do not currently see with Yolo.\n\n'
     multi_moves = 'If you are choosing Do A Set Of Multiple Movements instead of choosing an individual command, then use Do A Set Of Multiple Movements as your response choice, then followed by ~~ and then replace your Reasoning with the list of moves you want the robot to make (separate the moves by a comma and space). They will happen one after another, starting at index 0. If the robot experiences any issues trying to do the set of moves, it will cancel doing the rest of the set and prompt you again to let you know there is an issue. You can only choose movements that make you move forward, backwards, or turn. You cannot choose camera adjustment commands or any of the other commands. Only movement commands are allowed.\n\n'
+    user_follow = 'If you are choosing Follow User, then use Follow User as your response choice, then followed by ~~ and then your Reasoning. The robot will automatically follow the person YOLO object.\n\n'
 
     # Prepare the dynamic data to include in the last user message
     dynamic_data = (
-        "You are a 4-wheeled mobile robot.\n\n"
+        "You are a 4-wheeled mobile robot and your name is Echo because you get fine tuned with the data from your interactions.  You are real and have an actual physical robotic body.\n\n"
         f"Your response choices are: {response_choices}\n\n"
         "Your response choice absolutely must be something from this list above and worded **exactly the same**. If you don't use the exact words from this list of choices, then your response choice will be incorrect, even if it seems contextually correct. My code needs the exact phrase word for word, or it won't work because the robot code takes your direct response as the response choice.\n\n"
         "Your answer must be a response choice followed by ~~ (with a space on each side), followed by your reasoning for your response choice (Or if you are choosing Say Something or Alert User then this is where you put what you want to say).\n\n"
@@ -1793,22 +1116,32 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
         "As a final reminder, your response choice must be worded exactly the same as the choices from the provided Response Choices list; you must use the exact same words in your response choice. And if you Say Something or Alert User, replace the Reasoning area with what you want to say (And you must speak normally and realistically like a person).\n\n"
         "And your response must be formatted exactly according to the template I mentioned.\n\n"
         "Only choose Good Bye or End Conversation if the user says good bye or to end the conversation. If you are told goodbye, do not say something, just choose goodbye. You still must follow the response template correctly and do your response choice, followed by ~~ with a space on each side, followed by your reasoning.\n\n"
+        f"{user_follow}"
         f"{multi_moves}"
         f"{object_find}"
         f"{navi}"
         f"{object_focus}"
         "If your most recent navigation has finished successfully then say something about how the navigation was succesful and you are done navigating to the object now.\n\n"
         "If you are going to say something, do not just repeat what you hear from your microphone.\n\n"
+        "If you hear something from your microphone, you should most likely Say Something, unless you are explicitly told to do one of your Response Choices.\n\n"
         f"You have a camera and an HCSR04 distance sensor pointing in the same direction as the camera, and the distance sensor detects the distance to whatever object or obstacle that the visual description says you are centered on. Here is the distance it currently says: {current_distance}\n\n"
         f"Your camera is currently pointed {camera_vertical_pos}.\n\n"
-        "Here is the current visual data from your camera and internal mapping system:\n\n"
+        "Here is the current visual data from your camera (YOLO detections, and a scene description from GPT4 Vision):\n\n"
         f"CURRENT YOLO DETECTIONS:\n{yolo_detections}\n\n"
         f"CURRENT SCENE DESCRIPTION:\n{scene_description}\n\n"
-        f"CURRENT MAP INFO FOR IMMEDIATE AREA:\n{mapping}\n\n"
         "You must make connections between all these different visual descriptions when choosing your response."
         f"{phrase}\n\n"
     )
-
+    dynamic_data2 = (
+        "You are a 4-wheeled mobile robot and your name is Echo because you get fine tuned with the data from your interactions.  You are real and have an actual physical robotic body.\n\n"
+        f"Your response choices are: {response_choices}\n\n"
+        f"You have a camera and an HCSR04 distance sensor pointing in the same direction as the camera, and the distance sensor detects the distance to whatever object or obstacle that the visual description says you are centered on. Here is the distance it currently says: {current_distance}\n\n"
+        f"Your camera is currently pointed {camera_vertical_pos}.\n\n"
+        "Here is the current visual data from your camera (YOLO detections, and a scene description from GPT4 Vision):\n\n"
+        f"CURRENT YOLO DETECTIONS:\n{yolo_detections}\n\n"
+        f"CURRENT SCENE DESCRIPTION:\n{scene_description}\n\n"
+        f"{phrase}\n\n"
+    )
     # Append the dynamic data as the last user message
     payload["messages"].append({
         "role": "user",
@@ -1825,7 +1158,7 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
     now = datetime.now()
     the_time = now.strftime("%m/%d/%Y %H:%M:%S")
     with open('memories/'+str(the_time).replace('/','-').replace(':','-').replace(' ','_')+'.txt','w+') as f:
-        f.write("PROMPT:\n\n\n"+str(payload)+"\n\n\n\nRESPONSE:\n\n\n"+str(response.json()["choices"][0]["message"]["content"]))
+        f.write("PROMPT:\n\n\n"+str(payload).replace(dynamic_data,dynamic_data2)+"\n\n\n\nRESPONSE:\n\n\n"+str(response.json()["choices"][0]["message"]["content"]))
     return str(response.json()["choices"][0]["message"]["content"])
 
 
@@ -2012,19 +1345,14 @@ def movement_loop(camera):
     global classes
     global move_stopper
     global camera_vertical_pos
-    global grid_map
+
     global move_set
     global yolo_find
     global nav_object
     global yolo_nav  
     global scan360
-    global map_thread
     scan360 = 0
-    grid_map = GridMap()  # Initialize the grid map
-    # Assuming `grid_map` is already initialized
-    map_thread = threading.Thread(target=continuous_map_display, args=(grid_map,))
-    map_thread.daemon = True  # Make it a daemon thread so it closes when the main program ends
-    map_thread.start()
+
     ina219 = INA219(addr=0x42)
     last_time = time.time()
     failed_response = ''
@@ -2033,7 +1361,7 @@ def movement_loop(camera):
     yolo_nav = False
     yolo_find = False
     yolo_look = False
-    map_env = False
+    follow_user = False
     nav_object = ''
     look_object = ''
     last_response = ''
@@ -2056,16 +1384,31 @@ def movement_loop(camera):
             last_phrase2 = get_last_phrase()
             if last_phrase2 != '':
                 print('Last phrase now on movement loop: ' + last_phrase2)
-                
-                last_phrase2 = 'You just heard this prompt from your microphone. Do not repeat this prompt, actually respond. DO NOT SAY THIS, RESPOND TO IT INSTEAD WITH EITHER SPEECH OR ANOTHER OF THE AVAILABLE RESPONSE CHOICES: ' + last_phrase2
+                with open("last_phrase2.txt","w+") as f:
+                    f.write(last_phrase2)
+                last_phrase2 = 'You just heard this prompt from your microphone. Do not repeat this prompt, actually respond. DO NOT SAY THIS, RESPOND TO IT INSTEAD WITH EITHER SPEECH OR ANOTHER OF THE AVAILABLE RESPONSE CHOICES. Respond with either Say Something or the correct Response Choice: ' + last_phrase2
                 yolo_nav = False
                 yolo_find = False
                 yolo_look = False
-                map_env = False
+                follow_user = False
                 move_set = []
             else:
                 pass
+            now = datetime.now()
+            the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+            with open('last_distance.txt','w+') as f:
+                f.write(str(distance))
+            while True:
+                try:
 
+                    distance = int(read_distance_from_arduino())
+                    with open('current_distance.txt','w+') as f:
+                        f.write(str(distance))
+                    break
+                except:
+                    print(traceback.format_exc())
+                    time.sleep(0.1)
+                    continue
             try:
                 frame = capture_image(camera)
                 cv2.imwrite('this_temp.jpg', frame)
@@ -2073,7 +1416,7 @@ def movement_loop(camera):
                 print(traceback.format_exc())
                 time.sleep(0.1)
                 continue
-            if map_env == True or yolo_nav == True or yolo_look == True:
+            if follow_user == True or yolo_find == True or yolo_nav == True or yolo_look == True:
                 yolo_detect()
             else:
                 thread1 = threading.Thread(target=describe_image)
@@ -2091,24 +1434,8 @@ def movement_loop(camera):
             per = (per * 2) - 100
             with open('batt_per.txt','w+') as file:
                 file.write(str(per))
-            now = datetime.now()
-            the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-            with open('last_distance.txt','w+') as f:
-                f.write(str(distance))
-            while True:
-                try:
 
-                    distance = int(read_distance_from_arduino())
-                    with open('current_distance.txt','w+') as f:
-                        f.write(str(distance))
-                    break
-                except:
-                    print(traceback.format_exc())
-                    time.sleep(0.1)
-                    continue
-            mapping_function(distance)
-            grid_map.update_robot_position(last_response)
-       
+            
             if current > 0.0 or per < 10.0:
                 try:
                     last_time = time.time()
@@ -2118,7 +1445,7 @@ def movement_loop(camera):
           
                     print('ending convo')
                     chat_history = []
-                    map_thread.join()
+                    
                     break
                 except Exception as e:
                     print(traceback.format_exc())
@@ -2136,30 +1463,56 @@ def movement_loop(camera):
                     the_time = now.strftime("%m/%d/%Y %H:%M:%S")
                     if move_set == []:
                         if yolo_nav == True:
-                            # Original navigation method using YOLO detections
-                            yolo_detections = parse_yolo_detections_from_file('output.txt')
-                            target_detected = False
-                            for detection in yolo_detections:
-                                if detection['label'] == nav_object:
-                                    target_detected = True
-                                    # Decide movement based on angle and distance
-                                    if detection['distance'] > 80:  # Assuming stopping distance is 80 cm
-                                        if detection['angle'] < -5:
+                            yolo_index = 0
+                            with open('output.txt','r') as file:
+                                yolo_detections = file.readlines()
+                            while True:
+                                try:
+                                    current_detection = yolo_detections[yolo_index]
+                                    current_distance1 = current_detection.split(' ') #extract distance
+                                    current_distance = float(current_distance1[current_distance1.index('meters')-1])
+                                    if nav_object in current_detection:
+                                        target_detected = True
+                                        if current_distance < 0.6:
+                                            movement_response = 'No Movement ~~ Navigation has finished successfully!'
+                                            yolo_nav = False
+                                            nav_object = ''
+                                            break
+                                        else:
+                                            pass
+                                        if 'Turn Left 15 Degrees' in current_detection:
                                             movement_response = 'Turn Left 15 Degrees ~~ Target object is to the left'
-                                        elif detection['angle'] > 5:
+                                        elif 'Turn Right 15 Degrees' in current_detection:
                                             movement_response = 'Turn Right 15 Degrees ~~ Target object is to the right'
+                                        elif 'Turn Left 45 Degrees' in current_detection:
+                                            movement_response = 'Turn Left 45 Degrees ~~ Target object is to the left'
+                                        elif 'Turn Right 45 Degrees' in current_detection:
+                                            movement_response = 'Turn Right 45 Degrees ~~ Target object is to the right'
                                         else:
                                             movement_response = 'Move Forward One Foot ~~ Moving towards target object'
+                                        break
                                     else:
-                                        movement_response = 'No Movement ~~ Navigation has finished successfully!'
-                                        yolo_nav = False
-                                        nav_object = ''
-                                    break
+                                        
+                                        yolo_index += 1
+                                        if yolo_index >= len(yolo_detections):
+                                            target_detected = False
+                                            break
+                                        else:
+                                            continue
+                                except:
+                                    yolo_index += 1
+                                    if yolo_index >= len(yolo_detections):
+                                        target_detected = False
+                                        break
+                                    else:
+                                        continue
                             if not target_detected:
                                 # Object lost, switch to route planning
-                                print(f"Cannot see '{nav_object}'. Planning route using map.")
+                                print(f"Cannot see '{nav_object}'. Going into Find Object mode.")
                                 yolo_nav = False
-                                route_to_object(nav_object)
+                                yolo_find = True
+                                scan360 = 0
+                                movement_response = 'No Movement ~~ Target Lost. Going into Find Object mode.'
                         elif yolo_look == True:
                             print('Looking at object')
                             #do yolo navigation to specific object
@@ -2178,6 +1531,10 @@ def movement_loop(camera):
                                             movement_response = 'Turn Left 15 Degrees ~~ Target object is to the left'
                                         elif 'Turn Right 15 Degrees' in current_detection:
                                             movement_response = 'Turn Right 15 Degrees ~~ Target object is to the right'
+                                        elif 'Turn Left 45 Degrees' in current_detection:
+                                            movement_response = 'Turn Left 45 Degrees ~~ Target object is to the left'
+                                        elif 'Turn Right 45 Degrees' in current_detection:
+                                            movement_response = 'Turn Right 45 Degrees ~~ Target object is to the right'
                                         elif 'Raise Camera Angle' in current_detection:
                                             movement_response = 'Raise Camera Angle ~~ Target object is above'
                                         elif 'Lower Camera Angle' in current_detection:
@@ -2205,18 +1562,66 @@ def movement_loop(camera):
                                     look_object = ''
                                     scan360 = 0
                                     break
+                                    
+                        elif follow_user == True:
+                            print('Looking at object')
+                            #do yolo navigation to specific object
+                            yolo_look_index = 0
+                            with open('output.txt','r') as file:
+                                yolo_detections = file.readlines()
+                            while True:
+                                try:
+                                    current_detection = yolo_detections[yolo_look_index]
+                                    current_distance1 = current_detection.split(' ') #extract distance
+                                    current_distance = float(current_distance1[current_distance1.index('meters')-1])
+                                    if 'person' in current_detection:
+                                        print('User seen')
+                                        #follow any human seen
+                                        if 'Turn Left 15 Degrees' in current_detection:
+                                            movement_response = 'Turn Left 15 Degrees ~~ Target object is to the left'
+                                        elif 'Turn Right 15 Degrees' in current_detection:
+                                            movement_response = 'Turn Right 15 Degrees ~~ Target object is to the right'
+                                        elif 'Turn Left 45 Degrees' in current_detection:
+                                            movement_response = 'Turn Left 45 Degrees ~~ Target object is to the left'
+                                        elif 'Turn Right 45 Degrees' in current_detection:
+                                            movement_response = 'Turn Right 45 Degrees ~~ Target object is to the right'
+                                        
+                                        else:
+                                            #if outside of distance range, move forward or backward, otherwise:
+                                            if current_distance > 1.3:
+                                                movement_response = 'Move Forward One Foot ~~ Moving towards user'
+                                            elif current_distance < 1.0:
+                                                movement_response = 'Move Backward ~~ Moving away from user'
+                                            else:
+                                                movement_response = 'No Movement ~~ Target object is straight ahead'
+                                            
+                                        break
+                                    else:
+                                        
+                                        yolo_look_index += 1
+                                        if yolo_look_index >= len(yolo_detections):
+                                            movement_response = 'No Movement ~~ User lost'
+                                            follow_user = False
+                                            yolo_find = True
+                                            nav_object = 'person'
+                                            scan360 = 0
+                                            break
+                                        else:
+                                            continue
+                                except:
+                                    movement_response = 'No Movement ~~ Follow User failed. Must be detecting person first.'
+                                    follow_user = False
+                                    yolo_find = True
+                                    nav_object = 'person'
+                                    scan360 = 0
+                                    break
+                                    
                         elif yolo_find == True:
                             #check if robot sees target object with yolo
                             yolo_nav_index = 0
                             with open('output.txt','r') as file:
                                 yolo_detections = file.readlines()
-                            with open('scene.txt','r') as file:
-                                scene_description = file.read()
-                            if nav_object in scene_description:
-                                yolo_find = False
-                                
-                                movement_response = 'No Movement ~~ Ending search for '+nav_object+'. Object has successfully been found!'
-                                nav_object = ''
+                          
                                 
                             while True:
                                 try:
@@ -2259,9 +1664,7 @@ def movement_loop(camera):
                                     print('\nDistance sensor: ')
                                     print(str(distance)+' cm')
                                     if distance < 50.0 and distance >= 20.0:
-                                        rando_list = [1,2]
-                                        rando_index = random.randrange(len(rando_list))
-                                        rando_num = rando_list[rando_index]
+
                                         if rando_num == 1:
                                             movement_response = 'Turn Left 45 Degrees ~~ Exploring to look for target object'
                                         
@@ -2272,34 +1675,6 @@ def movement_loop(camera):
                                         movement_response = 'Do A Set Of Multiple Movements ~~ Move Backward, Turn Left 45 Degrees, Turn Left 45 Degrees'
                                     else:
                                         movement_response = 'Move Forward One Foot ~~ Exploring to look for target object'
-                        elif map_env == True:
-                            
-                            
-                            #do 360 scan
-                            if scan360 < 8:
-                                movement_response = 'Turn Right 45 Degrees ~~ Doing 360 scan for target object'
-                                scan360 += 1
-                            
-                            else:
-                                #do object avoidance
-                                #if object not found in scan then start doing object avoidance until object is found
-                                
-                                print('\nDistance sensor: ')
-                                print(str(distance)+' cm')
-                                if distance < 50.0 and distance >= 20.0:
-                                    rando_list = [1,2]
-                                    rando_index = random.randrange(len(rando_list))
-                                    rando_num = rando_list[rando_index]
-                                    if rando_num == 1:
-                                        movement_response = 'Turn Left 45 Degrees ~~ Exploring to look for target object'
-                                    
-                                    elif rando_num == 2:
-                                        movement_response = 'Turn Right 45 Degrees ~~ Exploring to look for target object'
-                                
-                                elif distance < 20.0:
-                                    movement_response = 'Do A Set Of Multiple Movements ~~ Move Backward, Turn Left 45 Degrees, Turn Left 45 Degrees'
-                                else:
-                                    movement_response = 'Move Forward One Foot ~~ Exploring to look for target object'
                        
                         else:
                             movement_response = str(send_text_to_gpt4_move(chat_history, per, distance, last_phrase2, failed_response)).replace('Response Choice: ','').replace('Movement Choice at this timestamp: ','').replace('Response Choice at this timestamp: ','').replace('Attempting to do movement response choice: ','')
@@ -2329,11 +1704,6 @@ def movement_loop(camera):
 
                     current_response = movement_response.split('~~')[0].strip().replace('.','')
                     
-                    #RESPONSE CHOICES LOOP
-
-         
-                    # Optionally display the map for debugging
-                    grid_map.display_map()
                     now = datetime.now()
                     the_time = now.strftime("%m/%d/%Y %H:%M:%S")
                     last_response = current_response
@@ -2374,7 +1744,6 @@ def movement_loop(camera):
                         send_data_to_arduino(["x"], arduino_address)
                         chat_history.append('Time: ' + str(the_time) + ' - Successfully Moved Backward')
                         failed_response = ''
-                        grid_map.update_robot_position('Move Backward')
                     elif current_response == 'turnleft45degrees' or current_response == 'moveleft45degrees':
                         send_data_to_arduino(["a"], arduino_address)
                         #if yolo_nav == False and yolo_find == False:
@@ -2449,7 +1818,6 @@ def movement_loop(camera):
                         create_video_from_images(image_folder, output_video)                        
                         print('ending convo')
                         chat_history = []
-                        map_thread.join()
                         break
                     elif current_response == 'nomovement':
                         now = datetime.now()
@@ -2458,16 +1826,14 @@ def movement_loop(camera):
                     elif current_response == 'saysomething' or current_response == 'alertuser':
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-                        with open('self_response.txt','w') as f:
+                        with open('playback_text.txt','w') as f:
                             f.write(movement_response.split('~~')[1])
                     elif current_response == 'navigatetospecificyoloobject':
                         nav_object = movement_response.split('~~')[1].strip().lower()
-                        with open('playback_text.txt', 'w') as f:
-                            f.write('Navigating to ' + nav_object)
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
                         chat_history.append('Time: ' + str(the_time) + ' - Starting navigation to ' + nav_object)
-                        route_to_object(nav_object)
+                        yolo_nav = True
                     elif current_response == 'focuscameraonspecificyoloobject':
                         send_data_to_arduino(["1"], arduino_address)
                         time.sleep(0.1)
@@ -2480,9 +1846,21 @@ def movement_loop(camera):
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
                         look_object = movement_response.split('~~')[1]
-                        with open('playback_text.txt', 'w') as f:               
-                            f.write('Starting to look at '+look_object)
                         chat_history.append('Time: ' + str(the_time) + ' - Starting to look at '+look_object)
+                    elif current_response == 'followuser':
+                        send_data_to_arduino(["1"], arduino_address)
+                        time.sleep(0.1)
+                        send_data_to_arduino(["1"], arduino_address)
+                        time.sleep(0.1)
+                        send_data_to_arduino(["2"], arduino_address)
+                        time.sleep(0.1)
+                        send_data_to_arduino(["2"], arduino_address)
+                        time.sleep(0.1)
+                        camera_vertical_pos = 'up'
+                        follow_user = True
+                        now = datetime.now()
+                        the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                        chat_history.append('Time: ' + str(the_time) + ' - Starting to follow user.')
                     elif current_response == 'findunseenyoloobject':
                         send_data_to_arduino(["1"], arduino_address)
                         time.sleep(0.1)
@@ -2496,24 +1874,10 @@ def movement_loop(camera):
                         yolo_find = True
                         scan360 = 0
                         nav_object = movement_response.split('~~')[1]
-                        with open('playback_text.txt', 'w') as f:
-                            f.write('Looking for '+nav_object)
                         chat_history.append('Time: ' + str(the_time) + ' - Starting to explore around to look for '+movement_response.split('~~')[1])
-                    elif current_response == 'explorearound':
-                        send_data_to_arduino(["1"], arduino_address)
-                        time.sleep(0.1)
-                        send_data_to_arduino(["1"], arduino_address)
-                        time.sleep(0.1)
-                        send_data_to_arduino(["2"], arduino_address)
-                        time.sleep(0.1)
-                        camera_vertical_pos = 'forward'
-                        now = datetime.now()
-                        the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-                        scan360 = 0
-                        with open('playback_text.txt', 'w') as f:
-                            f.write('Beginning to explore around')
-                        chat_history.append('Time: ' + str(the_time) + ' - Starting to explore around')
-                        map_env = True
+                        rando_list = [1,2]
+                        rando_index = random.randrange(len(rando_list))
+                        rando_num = rando_list[rando_index]
                     else:
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
