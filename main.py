@@ -621,9 +621,11 @@ def listen_and_transcribe():
             is_speech = vad.is_speech(frame, RATE)
             speech_frames.append(frame)
             if is_speech:
+                print('speech detected')
                 non_speech_count = 0
                 speech_count += 1
             else:
+                print('no speech')
                 non_speech_count += 1
                 if non_speech_count > post_speech_buffer:
                     if speech_count >= 30 and not is_transcribing:
