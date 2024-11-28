@@ -32,7 +32,7 @@ def clear_files_in_folder(folder_path):
 
 # Example usage
 folder_path = 'Pictures/'
-clear_files_in_folder(folder_path)
+#clear_files_in_folder(folder_path)
 move_set = []
 camera_horizontal_fov = 160.0
 
@@ -621,11 +621,11 @@ def listen_and_transcribe():
             is_speech = vad.is_speech(frame, RATE)
             speech_frames.append(frame)
             if is_speech:
-                print('speech detected')
+                #print('speech heard')
                 non_speech_count = 0
                 speech_count += 1
             else:
-                print('no speech')
+                #print('no speech')
                 non_speech_count += 1
                 if non_speech_count > post_speech_buffer:
                     if speech_count >= 30 and not is_transcribing:
@@ -775,6 +775,7 @@ def send_data_to_arduino(data, address):
             break
         except:  # bluetooth.btcommon.BluetoothError as err:
             time.sleep(0.5)
+            print('Attempting BT connection again')
             continue
 
 
@@ -884,6 +885,7 @@ while True:
         break
     except:
         time.sleep(0.5)
+        print('bt error')
         continue
 print(arduino_address)
 
@@ -1053,11 +1055,35 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
 
 
 
-    response_choices = ("Follow User, Say Something, Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, Do A Set Of Multiple Movements, Raise Camera Angle, Lower Camera Angle, Find Unseen Yolo Object, Focus Camera On Specific Yolo Object, Navigate To Specific Yolo Object, Alert User, No Movement, End Conversation, Good Bye.\n\n")
+    # Original response_choices string
+    response_choices = "Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, Do A Set Of Multiple Movements, Raise Camera Angle, Lower Camera Angle, Follow User, Say Something, Find Unseen Yolo Object, Focus Camera On Specific Yolo Object, Navigate To Specific Yolo Object, Alert User, No Movement, End Conversation, Good Bye.\n\n"
+
+    # Step 1: Clean the string by removing trailing newlines and the period
+    clean_choices = response_choices.strip().rstrip('.')
+
+    # Step 2: Split the string into a list of choices
+    choices_list = clean_choices.split(', ')
+
+    # Step 3: Shuffle the list randomly
+    random.shuffle(choices_list)
+
+    # Step 4: Reassemble the list into a string
+    # Add the period back to the last choice
+    choices_list[-1] += '.'
+
+    # Join the choices back into a single string separated by commas
+    randomized_response_choices = ', '.join(choices_list) + '\n\n'
+
+    # Step 5: Assign the randomized string back to response_choices
+    response_choices = f'"{randomized_response_choices}"'
+
+    # Optional: Print the randomized response_choices
+    print(f'response_choices = {response_choices}')
     if failed != '':
         response_choices = response_choices.replace(failed, '')
+        failure = 'Your last response choice, ' + failed + ', failed to execute.'
     else:
-        pass
+        failure = 'Your last response choice executed successfully.'
 
 
 
@@ -1068,7 +1094,12 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
             # The session history will be added here as individual messages
         ],
     }
-
+    payload2 = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            # The session history will be added here as individual messages
+        ],
+    }
     # Now, parse the session history and add messages accordingly
     for entry in history:
         timestamp_and_content = entry.split(" - ", 1)
@@ -1077,17 +1108,25 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
 
         timestamp, content = timestamp_and_content
 
-        if "User Greeting:" in content or "You just heard this prompt" in content:
+        if "Prompt:" in content:
             # User message
             message_content = content.split(": ", 1)[-1]
             payload["messages"].append({
                 "role": "user",
                 "content": message_content.strip()
             })
-        elif "Robot response at this timestamp:" in content or "Robot Greeting:" in content:
+            payload2["messages"].append({
+                "role": "user",
+                "content": message_content.strip()
+            })
+        elif "Response:" in content:
             # Assistant message
             message_content = content.split(": ", 1)[-1].strip()
             payload["messages"].append({
+                "role": "assistant",
+                "content": message_content
+            })
+            payload2["messages"].append({
                 "role": "assistant",
                 "content": message_content
             })
@@ -1098,52 +1137,56 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
                 "role": "system",
                 "content": message_content
             })
+            payload2["messages"].append({
+                "role": "system",
+                "content": message_content
+            })
 
     navi = 'If you are choosing Navigate To Specific Yolo Object, then use Navigate To Specific Yolo Object as your response choice, then followed by ~~ and then replace your Reasoning with the closest relevant standard yolo coco name that goes with the object (you can only put the coco name, not a whole sentence or any adjectives on the name. You can only choose from this standard list of coco objects: person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light, fire hydrant, stop sign, parking meter, bench, bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe, backpack, umbrella, handbag, tie, suitcase, frisbee, skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard, tennis racket, bottle, wine glass, cup, fork, knife, spoon, bowl, banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, chair, sofa, potted plant, bed, dining table, toilet, tv monitor, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear, hair dryer, toothbrush). The robot will automatically navigate to whichever yolo object you choose. You cannot choose to Navigate to an object if you just successfully navigated to it in the session history recently (Like for real, you cannot just repeatedly choose this if it was already successful. Only choose Navigate To Specific Yolo Object if you need to move to that object. Do not choose Navigate To Specific Yolo Object if you see in the history that you have already successfully navigated to the target object. You cannot choose to navigate to a specific object if the distance to that object is less than 0.6 meters or if you recently finished navigating to that object. If the user wants you to come to them or you want to go to the user, then navigate to a person object. And once, again, make sure you arent choosing to navigate to an object if you already navigated to it successfully.\n\n'
     object_focus = 'If you are choosing Focus Camera On Specific Yolo Object, then use Focus Camera On Specific Yolo Object as your response choice, then followed by ~~ and then replace your Reasoning with the closest relevant standard yolo coco name that goes with whatever type of object you are looking for (you can only put the coco name, not a whole sentence). The robot will automatically focus the camera on whichever yolo object you choose. Only choose Focus Camera On Specific Yolo Object if you need to constantly focus on that object. You can only choose to focus the camera on a yolo object that you are currently detecting. If the user wants you to look at them, then choose the person class.\n\n'
     object_find = 'If you are choosing Find Unseen Yolo Object, then use Find Unseen Yolo Object as your response choice, then followed by ~~ and then replace your Reasoning with absolutely only the yolo coco name of the object. The robot will automatically try to find whichever yolo object you choose so you absolutely must choose an actual yolo coco object from the standard list of 80, just choose the closest standard coco yolo object to what you are looking for (you can only put the coco name, not a whole sentence. You can only choose from this list of objects: person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light, fire hydrant, stop sign, parking meter, bench, bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe, backpack, umbrella, handbag, tie, suitcase, frisbee, skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard, tennis racket, bottle, wine glass, cup, fork, knife, spoon, bowl, banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, chair, sofa, potted plant, bed, dining table, toilet, tv monitor, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear, hair dryer, toothbrush). Only choose Find Unseen Yolo Object if you need to find an object that you do not currently see with Yolo.\n\n'
     multi_moves = 'If you are choosing Do A Set Of Multiple Movements instead of choosing an individual command, then use Do A Set Of Multiple Movements as your response choice, then followed by ~~ and then replace your Reasoning with the list of moves you want the robot to make (separate the moves by a comma and space). They will happen one after another, starting at index 0. If the robot experiences any issues trying to do the set of moves, it will cancel doing the rest of the set and prompt you again to let you know there is an issue. You can only choose movements that make you move forward, backwards, or turn. You cannot choose camera adjustment commands or any of the other commands. Only movement commands are allowed.\n\n'
     user_follow = 'If you are choosing Follow User, then use Follow User as your response choice, then followed by ~~ and then your Reasoning. The robot will automatically follow the person YOLO object.\n\n'
-
+    hist = 'You must give varied responses. Do not repeat saying the same or similar stuff over and over. If choosing Say Something, you absolutely must look at your responses from the session history and make sure you arent making the robot repeat similar things over and over. Also, try to wait until you actually hear something from the microphone before you choose Say Something, otherwise you should most likely choose something else if you havent heard anything from your microphone.\n\n'
     # Prepare the dynamic data to include in the last user message
     dynamic_data = (
         "You are a 4-wheeled mobile robot and your name is Echo because you get fine tuned with the data from your interactions.  You are real and have an actual physical robotic body.\n\n"
-        f"Your response choices are: {response_choices}\n\n"
+        "Make sure to pay attention to the flow of things by referencing the session history provided in this prompt.\n\n"
+        f"{failure}\n\n"
+        f"Your response choices are (These are in random order on this given list): {response_choices}\n\n"
         "Your response choice absolutely must be something from this list above and worded **exactly the same**. If you don't use the exact words from this list of choices, then your response choice will be incorrect, even if it seems contextually correct. My code needs the exact phrase word for word, or it won't work because the robot code takes your direct response as the response choice.\n\n"
         "Your answer must be a response choice followed by ~~ (with a space on each side), followed by your reasoning for your response choice (Or if you are choosing Say Something or Alert User then this is where you put what you want to say).\n\n"
-        "If you want to move to a particular object, make sure you turn and center on it between left and right first before moving forward towards it. If you cannot see what you are trying to see, turning most likely is a better option than going forward, but not all the time.\n\n"
         "The part of your response where you put either your reasoning or what you want to say or your alert can be no longer than like 2 to 4 sentences, but ideally less, like as few words as possible unless you have to say more.\n\n"
         "Your response must be formatted perfectly according to the template I gave, and your response choice must be worded exactly the same as one of the options from the list of response choices. You absolutely must format your response correctly as mentioned in the instructions.\n\n"
         "You cannot include any preface labels in your response (for example, do not start your response with 'Response Choice: ...'; you should just state the choice).\n\n"
         "As a final reminder, your response choice must be worded exactly the same as the choices from the provided Response Choices list; you must use the exact same words in your response choice. And if you Say Something or Alert User, replace the Reasoning area with what you want to say (And you must speak normally and realistically like a person).\n\n"
         "And your response must be formatted exactly according to the template I mentioned.\n\n"
         "Only choose Good Bye or End Conversation if the user says good bye or to end the conversation. If you are told goodbye, do not say something, just choose goodbye. You still must follow the response template correctly and do your response choice, followed by ~~ with a space on each side, followed by your reasoning.\n\n"
+        f"{hist}"
         f"{user_follow}"
         f"{multi_moves}"
         f"{object_find}"
         f"{navi}"
         f"{object_focus}"
-        "If your most recent navigation has finished successfully then say something about how the navigation was succesful and you are done navigating to the object now.\n\n"
-        "If you are going to say something, do not just repeat what you hear from your microphone.\n\n"
-        "If you hear something from your microphone, you should most likely Say Something, unless you are explicitly told to do one of your Response Choices.\n\n"
+        "If you are going to Say Something, do not just repeat what you hear from your microphone.\n\n"
+        "Do not ask how you can help or if there is anything you can do. It gets repetitive and is pointless. Just respond like an actual person instead of some robot assistant whose only purpose is to help.\n\n"
         f"You have a camera and an HCSR04 distance sensor pointing in the same direction as the camera, and the distance sensor detects the distance to whatever object or obstacle that the visual description says you are centered on. Here is the distance it currently says: {current_distance}\n\n"
         f"Your camera is currently pointed {camera_vertical_pos}.\n\n"
-        "Here is the current visual data from your camera (YOLO detections, and a scene description from GPT4 Vision):\n\n"
-        f"CURRENT YOLO DETECTIONS:\n{yolo_detections}\n\n"
-        f"CURRENT SCENE DESCRIPTION:\n{scene_description}\n\n"
-        "You must make connections between all these different visual descriptions when choosing your response."
+        f"Current Camera Image Scene Description:\n{scene_description}\n\n"
+        f"Current Camera Image YOLO Detections (These are not targets yet, they are only what is detected in the camera image currently:\n{yolo_detections}\n\n"
+        "You must make connections between all this data as well as session history data when choosing your response."
         f"{phrase}\n\n"
     )
     dynamic_data2 = (
-        "You are a 4-wheeled mobile robot and your name is Echo because you get fine tuned with the data from your interactions.  You are real and have an actual physical robotic body.\n\n"
+        f"{failure}\n\n"
         f"Your response choices are: {response_choices}\n\n"
-        f"You have a camera and an HCSR04 distance sensor pointing in the same direction as the camera, and the distance sensor detects the distance to whatever object or obstacle that the visual description says you are centered on. Here is the distance it currently says: {current_distance}\n\n"
         f"Your camera is currently pointed {camera_vertical_pos}.\n\n"
-        "Here is the current visual data from your camera (YOLO detections, and a scene description from GPT4 Vision):\n\n"
-        f"CURRENT YOLO DETECTIONS:\n{yolo_detections}\n\n"
-        f"CURRENT SCENE DESCRIPTION:\n{scene_description}\n\n"
+        f"Current Camera Image YOLO Detections (These are not targets yet, they are only what is detected in the camera image currently:\n{yolo_detections}\n\n"
+        f"Current Camera Image Scene Description:\n{scene_description}\n\n"
+        "You must make connections between all this data as well as session history data when choosing your response."
         f"{phrase}\n\n"
     )
+
     # Append the dynamic data as the last user message
     payload["messages"].append({
         "role": "user",
@@ -1153,15 +1196,25 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
         }]
         
     })
-                
+    payload2["messages"].append({
+        "role": "user",
+        "content": [{
+            "type": "text",
+            "text": dynamic_data2
+        }]
+        
+    })
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
     print('\n\n\n\nRESPONSE: \n' + str(response.json()))
     now = datetime.now()
     the_time = now.strftime("%m/%d/%Y %H:%M:%S")
     with open('memories/'+str(the_time).replace('/','-').replace(':','-').replace(' ','_')+'.txt','w+') as f:
-        f.write("PROMPT:\n\n\n"+str(payload).replace(dynamic_data,dynamic_data2)+"\n\n\n\nRESPONSE:\n\n\n"+str(response.json()["choices"][0]["message"]["content"]))
-    return str(response.json()["choices"][0]["message"]["content"])
+        f.write("PROMPT:\n\n\n"+str(payload2)+"\n\n\n\nRESPONSE:\n\n\n"+str(response.json()["choices"][0]["message"]["content"]))
+    #add prompt and response to history
+    chat_history.append('Time: ' + str(the_time) + ' - ' + "PROMPT:"+str(dynamic_data2))
+    chat_history.append('Time: ' + str(the_time) + ' - ' + "RESPONSE:"+str(response.json()["choices"][0]["message"]["content"]))
+    return str(response.json()["choices"][0]["message"]["content"]), history #return new history
 
 
 def send_text_to_gpt4_convo(history, text):
@@ -1279,8 +1332,6 @@ def say_greeting(last_phrase):
    
     text = str(send_text_to_gpt4_convo(chat_history, last_phrase))
     print('got gpt response')
-    chat_history.append('Time: ' + str(the_time) + ' - User Greeting: ' + last_phrase)  # add response to chat history
-    chat_history.append('Time: ' + str(the_time) + ' - Robot Greeting: ' + text)  # add response to chat history
     print('added to history')
     last_time = time.time()
 
@@ -1376,26 +1427,25 @@ def movement_loop(camera):
             break
         except:
             print(traceback.format_exc())
-            time.sleep(0.1)
+            time.sleep(60)
             continue
     #print('movement thread start')
     while True:
         try:
-            with open('current_history.txt','w+') as file:
-                file.write('\n'.join(chat_history))
+
             last_phrase2 = get_last_phrase()
             if last_phrase2 != '':
                 print('Last phrase now on movement loop: ' + last_phrase2)
                 with open("last_phrase2.txt","w+") as f:
                     f.write(last_phrase2)
-                last_phrase2 = 'You just heard this prompt from your microphone. Do not repeat this prompt, actually respond. DO NOT SAY THIS, RESPOND TO IT INSTEAD WITH EITHER SPEECH OR ANOTHER OF THE AVAILABLE RESPONSE CHOICES. Respond with either Say Something or the correct Response Choice: ' + last_phrase2
+                last_phrase2 = 'You just heard this prompt from your microphone. Do not repeat this prompt, actually respond. DO NOT SAY THIS, RESPOND TO IT INSTEAD WITH EITHER SPEECH OR ANOTHER OF THE AVAILABLE RESPONSE CHOICES. Respond with either Say Something or the correct Response Choice. DONT REPEAT WHAT IS SAID NEXT: ' + last_phrase2
                 yolo_nav = False
                 yolo_find = False
                 yolo_look = False
                 follow_user = False
                 move_set = []
             else:
-                pass
+                last_phrase2 = 'You have not heard anything from you microphone on this loop of the program, so check the session history for reference of what you should do.'
             now = datetime.now()
             the_time = now.strftime("%m/%d/%Y %H:%M:%S")
             with open('last_distance.txt','w+') as f:
@@ -1409,14 +1459,14 @@ def movement_loop(camera):
                     break
                 except:
                     print(traceback.format_exc())
-                    time.sleep(0.1)
+                    time.sleep(60)
                     continue
             try:
                 frame = capture_image(camera)
                 cv2.imwrite('this_temp.jpg', frame)
             except:
                 print(traceback.format_exc())
-                time.sleep(0.1)
+                time.sleep(60)
                 continue
             if follow_user == True or yolo_find == True or yolo_nav == True or yolo_look == True:
                 yolo_detect()
@@ -1475,7 +1525,8 @@ def movement_loop(camera):
                                     current_distance = float(current_distance1[current_distance1.index('meters')-1])
                                     if nav_object in current_detection:
                                         target_detected = True
-                                        if current_distance < 0.6:
+                                        print(current_distance)
+                                        if current_distance < 0.4:
                                             movement_response = 'No Movement ~~ Navigation has finished successfully!'
                                             yolo_nav = False
                                             nav_object = ''
@@ -1590,9 +1641,9 @@ def movement_loop(camera):
                                         
                                         else:
                                             #if outside of distance range, move forward or backward, otherwise:
-                                            if current_distance > 1.3:
+                                            if current_distance > 1.0:
                                                 movement_response = 'Move Forward One Foot ~~ Moving towards user'
-                                            elif current_distance < 1.0:
+                                            elif current_distance < 0.8:
                                                 movement_response = 'Move Backward ~~ Moving away from user'
                                             else:
                                                 movement_response = 'No Movement ~~ Target object is straight ahead'
@@ -1630,9 +1681,18 @@ def movement_loop(camera):
                                     current_detection = yolo_detections[yolo_nav_index]
                                     if nav_object in current_detection:
                                         yolo_find = False
-                                        
-                                        movement_response = 'No Movement ~~ Ending search for '+nav_object+'. Object has successfully been found!'
-                                        nav_object = ''
+                                        if 'Turn Left 15 Degrees' in current_detection:
+                                            movement_response = 'Turn Left 15 Degrees ~~ Target object is to the left'
+                                        elif 'Turn Right 15 Degrees' in current_detection:
+                                            movement_response = 'Turn Right 15 Degrees ~~ Target object is to the right'
+                                        elif 'Turn Left 45 Degrees' in current_detection:
+                                            movement_response = 'Turn Left 45 Degrees ~~ Target object is to the left'
+                                        elif 'Turn Right 45 Degrees' in current_detection:
+                                            movement_response = 'Turn Right 45 Degrees ~~ Target object is to the right'
+                                        else:
+                                            yolo_find = False
+                                            movement_response = 'No Movement ~~ Ending search for '+nav_object+'. Object has successfully been found!'
+                                            nav_object = ''
                                         break
                                     else:
                                         yolo_nav_index += 1
@@ -1679,16 +1739,12 @@ def movement_loop(camera):
                                         movement_response = 'Move Forward One Foot ~~ Exploring to look for target object'
                        
                         else:
-                            movement_response = str(send_text_to_gpt4_move(chat_history, per, distance, last_phrase2, failed_response)).replace('Response Choice: ','').replace('Movement Choice at this timestamp: ','').replace('Response Choice at this timestamp: ','').replace('Attempting to do movement response choice: ','')
+                            movement_response, chat_history = send_text_to_gpt4_move(chat_history, per, distance, last_phrase2, failed_response)
+                            movement_response = movement_response.replace('RESPONSE:','').replace('Response:','').replace('Response Choice: ','').replace('Movement Choice at this timestamp: ','').replace('Response Choice at this timestamp: ','').replace('Attempting to do movement response choice: ','')
+
                     else:
                         movement_response = move_set[0] + ' ~~ Doing move from list of moves'
                         del move_set[0]
-                    if last_phrase2 != '':
-                        chat_history.append('Time: ' + str(the_time) + ' - ' + last_phrase2)
-                    else:
-                        pass
-                    chat_history.append('Time: ' + str(the_time) + ' - Robot response at this timestamp: ' + movement_response)  # add response to chat history                   
-                    
                     try:
                         print("\nPercent:       {:3.1f}%".format(per))
                         print('\nCurrent Distance: ' + str(distance) + ' cm')
@@ -1700,6 +1756,7 @@ def movement_loop(camera):
 
                     except:
                         print(traceback.format_exc())
+                        time.sleep(60)
                     
                     now = datetime.now()
                     the_time = now.strftime("%m/%d/%Y %H:%M:%S")
@@ -1711,9 +1768,8 @@ def movement_loop(camera):
                     last_response = current_response
                     current_response = current_response.lower().replace(' ', '')
                     if current_response == 'moveforward1inch' or current_response == 'moveforwardoneinch':
-                        if distance < 20.0:
+                        if distance < 15.0:
                             print('move forward 1 inch failed. Too close to obstacle to move forward anymore')
-                            chat_history.append('Time: ' + str(the_time) + ' - Move Forward 1 Inch Failed: Too close to obstacle to move forward anymore. You cannot choose Move Forward One Inch right now.')
                             failed_response = 'Move Forward One Inch, '
                             yolo_nav = False
                             move_set = []
@@ -1722,13 +1778,11 @@ def movement_loop(camera):
                             #if yolo_nav == False and yolo_find == False:
                             time.sleep(0.1)
                             send_data_to_arduino(["x"], arduino_address)
-                            chat_history.append('Time: ' + str(the_time) + ' - Successfully Moved Forward 1 Inch')
                             failed_response = ''
                             
                     elif current_response == 'moveforward1foot' or current_response == 'moveforwardonefoot':
-                        if distance < 50.0:
+                        if distance < 40.0:
                             print('move forward 1 foot failed. Too close to obstacle to move forward that far')
-                            chat_history.append('Time: ' + str(the_time) + ' - Move Forward 1 Foot Failed: Too close to obstacle to move forward that far. You cannot choose Move Forward One Foot right now.')
                             failed_response = 'Move Forward One Foot, '
                             yolo_nav = False
                             move_set = []
@@ -1737,57 +1791,48 @@ def movement_loop(camera):
                             #if yolo_nav == False and yolo_find == False:
                             time.sleep(0.5)
                             send_data_to_arduino(["x"], arduino_address)
-                            chat_history.append('Time: ' + str(the_time) + ' - Successfully Moved Forward 1 Foot')
                             failed_response = ''
                     elif current_response == 'movebackward':
                         send_data_to_arduino(["s"], arduino_address)
                         #if yolo_nav == False and yolo_find == False:
                         time.sleep(0.5)
                         send_data_to_arduino(["x"], arduino_address)
-                        chat_history.append('Time: ' + str(the_time) + ' - Successfully Moved Backward')
                         failed_response = ''
                     elif current_response == 'turnleft45degrees' or current_response == 'moveleft45degrees':
                         send_data_to_arduino(["a"], arduino_address)
                         #if yolo_nav == False and yolo_find == False:
                         time.sleep(0.15)
                         send_data_to_arduino(["x"], arduino_address)
-                        chat_history.append('Time: ' + str(the_time) + ' - Successfully Turned Left 45 Degrees')
                         failed_response = ''
                     elif current_response == 'turnleft15degrees' or current_response == 'moveleft15degrees':
                         send_data_to_arduino(["a"], arduino_address)
                         #if yolo_nav == False and yolo_find == False:
                         time.sleep(0.03)
                         send_data_to_arduino(["x"], arduino_address)
-                        chat_history.append('Time: ' + str(the_time) + ' - Successfully Turned Left 15 Degrees')
                         failed_response = ''
                     elif current_response == 'turnright45degrees' or current_response == 'moveright45degrees':
                         send_data_to_arduino(["d"], arduino_address)
                         #if yolo_nav == False and yolo_find == False:
                         time.sleep(0.15)
                         send_data_to_arduino(["x"], arduino_address)
-                        chat_history.append('Time: ' + str(the_time) + ' - Successfully Turned Right 45 Degrees')
                         failed_response = ''
                     elif current_response == 'turnright15degrees' or current_response == 'moveright15degrees':
                         send_data_to_arduino(["d"], arduino_address)
                         #if yolo_nav == False and yolo_find == False:
                         time.sleep(0.03)
                         send_data_to_arduino(["x"], arduino_address)
-                        chat_history.append('Time: ' + str(the_time) + ' - Successfully Turned Right 15 Degrees')
                         failed_response = ''
                     elif current_response == 'turnaround180degrees':
                         send_data_to_arduino(["d"], arduino_address)
                         time.sleep(1)
                         send_data_to_arduino(["x"], arduino_address)
-                        chat_history.append('Time: ' + str(the_time) + ' - Successfully Turned Around 180 Degrees')
                         failed_response = ''
                     elif current_response == 'doasetofmultiplemovements':
                         move_set = movement_response.split('~~')[1].strip().split(', ')
-                        chat_history.append('Time: ' + str(the_time) + ' - Initiating this set of moves: '+movement_response.split('~~')[1].strip())
                         failed_response = ''
 
                     elif current_response == 'raisecameraangle':
                         if camera_vertical_pos == 'up':
-                            chat_history.append('Time: ' + str(the_time) + ' - Raise Camera Angle Failed: Camera angle is already raised as much as possible. You cannot choose Raise Camera Angle right now.')
                             print('Raise Camera Angle Failed. Camera angle is already raised as much as possible.')
                             failed_response = 'Raise Camera Angle, '
                         else:
@@ -1796,10 +1841,8 @@ def movement_loop(camera):
                             failed_response = ''
                             
                             camera_vertical_pos = 'up'
-                            chat_history.append('Time: ' + str(the_time) + ' - Successfully Raised the Camera Angle to the max upward angle.')
                     elif current_response == 'lowercameraangle':
                         if camera_vertical_pos == 'forward':
-                            chat_history.append('Time: ' + str(the_time) + ' - Lower Camera Angle Failed: Camera angle is already lowered as much as possible. You cannot choose Lower Camera Angle right now.')
                             print('Lower Camera Angle failed. Camera angle is already lowered as much as possible.')
                             failed_response = 'Lower Camera Angle, '
                         else:
@@ -1808,7 +1851,6 @@ def movement_loop(camera):
                             failed_response = ''
                             
                             camera_vertical_pos = 'forward'
-                            chat_history.append('Time: ' + str(the_time) + ' - Successfully Lowered the Camera Angle to the lowest angle, which is looking directly forward.')
 
                     elif current_response == 'endconversation' or current_response == 'goodbye':
                         with open('playback_text.txt', 'w') as f:
@@ -1824,7 +1866,6 @@ def movement_loop(camera):
                     elif current_response == 'nomovement':
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-                        chat_history.append('Time: ' + str(the_time) + ' - Response choice was No Movement so not moving.')
                     elif current_response == 'saysomething' or current_response == 'alertuser':
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
@@ -1834,8 +1875,10 @@ def movement_loop(camera):
                         nav_object = movement_response.split('~~')[1].strip().lower()
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-                        chat_history.append('Time: ' + str(the_time) + ' - Starting navigation to ' + nav_object)
                         yolo_nav = True
+                        rando_list = [1,2]
+                        rando_index = random.randrange(len(rando_list))
+                        rando_num = rando_list[rando_index]
                     elif current_response == 'focuscameraonspecificyoloobject':
                         send_data_to_arduino(["1"], arduino_address)
                         time.sleep(0.1)
@@ -1848,7 +1891,6 @@ def movement_loop(camera):
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
                         look_object = movement_response.split('~~')[1]
-                        chat_history.append('Time: ' + str(the_time) + ' - Starting to look at '+look_object)
                     elif current_response == 'followuser':
                         send_data_to_arduino(["1"], arduino_address)
                         time.sleep(0.1)
@@ -1862,7 +1904,6 @@ def movement_loop(camera):
                         follow_user = True
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-                        chat_history.append('Time: ' + str(the_time) + ' - Starting to follow user.')
                     elif current_response == 'findunseenyoloobject':
                         send_data_to_arduino(["1"], arduino_address)
                         time.sleep(0.1)
@@ -1876,14 +1917,12 @@ def movement_loop(camera):
                         yolo_find = True
                         scan360 = 0
                         nav_object = movement_response.split('~~')[1]
-                        chat_history.append('Time: ' + str(the_time) + ' - Starting to explore around to look for '+movement_response.split('~~')[1])
                         rando_list = [1,2]
                         rando_index = random.randrange(len(rando_list))
                         rando_num = rando_list[rando_index]
                     else:
                         now = datetime.now()
                         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-                        chat_history.append('Time: ' + str(the_time) + ' - Response failed. You didnt follow my instructions properly for how you should respond. Here is what you responded with so dont do it again: ' + movement_response)
                         print('failed response')
                         
                     
@@ -1891,11 +1930,13 @@ def movement_loop(camera):
                     time.sleep(0.1)
             except:
                 print(traceback.format_exc())
+                time.sleep(60)
                 
             
             
         except:
             print(traceback.format_exc())
+            time.sleep(60)
             
 if __name__ == "__main__":
     try:
@@ -1924,7 +1965,7 @@ if __name__ == "__main__":
                 break
             except:
                 print(traceback.format_exc())
-                time.sleep(0.1)
+                time.sleep(60)
                 continue
         while True:
             time.sleep(0.25)
@@ -1971,5 +2012,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(traceback.format_exc())
         print(f"An error occurred: {e}")
+        time.sleep(60)
     finally:
         camera.close()
