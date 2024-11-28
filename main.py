@@ -1179,7 +1179,6 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
     )
     dynamic_data2 = (
         f"{failure}\n\n"
-        f"Your response choices are: {response_choices}\n\n"
         f"Your camera is currently pointed {camera_vertical_pos}.\n\n"
         f"Current Camera Image YOLO Detections (These are not targets yet, they are only what is detected in the camera image currently:\n{yolo_detections}\n\n"
         f"Current Camera Image Scene Description:\n{scene_description}\n\n"
