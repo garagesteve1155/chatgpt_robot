@@ -32,7 +32,7 @@ def clear_files_in_folder(folder_path):
 
 # Example usage
 folder_path = 'Pictures/'
-#clear_files_in_folder(folder_path)
+clear_files_in_folder(folder_path)
 move_set = []
 camera_horizontal_fov = 160.0
 
