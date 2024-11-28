@@ -1415,6 +1415,8 @@ def movement_loop(camera):
     yolo_find = False
     yolo_look = False
     follow_user = False
+    yolo_nav_was_true = False
+    follow_user_was_true = False
     nav_object = ''
     look_object = ''
     last_response = ''
@@ -1564,6 +1566,7 @@ def movement_loop(camera):
                                 print(f"Cannot see '{nav_object}'. Going into Find Object mode.")
                                 yolo_nav = False
                                 yolo_find = True
+                                yolo_nav_was_true = True
                                 scan360 = 0
                                 movement_response = 'No Movement ~~ Target Lost. Going into Find Object mode.'
                         elif yolo_look == True:
@@ -1611,9 +1614,7 @@ def movement_loop(camera):
                                 except:
                                     movement_response = 'No Movement ~~ Focus Camera On Specific Yolo Object failed. Must be detecting object first.'
                                     yolo_look = False
-                                    yolo_find = True
                                     look_object = ''
-                                    scan360 = 0
                                     break
                                     
                         elif follow_user == True:
@@ -1656,6 +1657,7 @@ def movement_loop(camera):
                                             movement_response = 'No Movement ~~ User lost'
                                             follow_user = False
                                             yolo_find = True
+                                            follow_user_was_true = True
                                             nav_object = 'person'
                                             scan360 = 0
                                             break
@@ -1692,7 +1694,15 @@ def movement_loop(camera):
                                         else:
                                             yolo_find = False
                                             movement_response = 'No Movement ~~ Ending search for '+nav_object+'. Object has successfully been found!'
-                                            nav_object = ''
+                                            if yolo_nav_was_true == True:
+                                                yolo_nav = True
+                                                yolo_nav_was_true = False
+                                            elif follow_user_was_true == True:
+                                                follow_user = True
+                                                follow_user_was_true = False
+                                            else:
+                                                nav_object = ''
+                                            
                                         break
                                     else:
                                         yolo_nav_index += 1
