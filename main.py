@@ -1170,6 +1170,7 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
         f"{object_focus}"
         "If you are going to Say Something, do not just repeat what you hear from your microphone.\n\n"
         "Do not ask how you can help or if there is anything you can do. It gets repetitive and is pointless. Just respond like an actual person instead of some robot assistant whose only purpose is to help.\n\n"
+        f"The current date and time is: {the_time}\n\n"
         f"You have a camera and an HCSR04 distance sensor pointing in the same direction as the camera, and the distance sensor detects the distance to whatever object or obstacle that the visual description says you are centered on. Here is the distance it currently says: {current_distance}\n\n"
         f"Your camera is currently pointed {camera_vertical_pos}.\n\n"
         f"Current Camera Image Scene Description:\n{scene_description}\n\n"
@@ -1179,10 +1180,11 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
     )
     dynamic_data2 = (
         f"{failure}\n\n"
+        f"The current date and time is: {the_time}\n\n"
         f"Your camera is currently pointed {camera_vertical_pos}.\n\n"
-        f"Current Camera Image YOLO Detections (These are not targets yet, they are only what is detected in the camera image currently:\n{yolo_detections}\n\n"
+        f"Forward Distance Sensor: {current_distance}\n\n"
         f"Current Camera Image Scene Description:\n{scene_description}\n\n"
-        "You must make connections between all this data as well as session history data when choosing your response."
+        f"Current Camera Image YOLO Detections (These are not targets yet, they are only what is detected in the camera image currently:\n{yolo_detections}\n\n"
         f"{phrase}\n\n"
     )
 
@@ -1209,7 +1211,7 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
     now = datetime.now()
     the_time = now.strftime("%m/%d/%Y %H:%M:%S")
     with open('memories/'+str(the_time).replace('/','-').replace(':','-').replace(' ','_')+'.txt','w+') as f:
-        f.write("PROMPT:\n\n\n"+str(payload2)+"\n\n\n\nRESPONSE:\n\n\n"+str(response.json()["choices"][0]["message"]["content"]))
+        f.write("PROMPT: \n\n\n"+str(payload2)+"\n\n\n\nRESPONSE: \n\n\n"+str(response.json()["choices"][0]["message"]["content"]))
     #add prompt and response to history
     chat_history.append('Time: ' + str(the_time) + ' - ' + "PROMPT:"+str(dynamic_data2))
     chat_history.append('Time: ' + str(the_time) + ' - ' + "RESPONSE:"+str(response.json()["choices"][0]["message"]["content"]))
