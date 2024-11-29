@@ -182,6 +182,29 @@ def estimate_distance(focal_length, real_height, pixel_height):
 # -----------------------------------
 # 4. Position and Size Description Functions
 # -----------------------------------
+def get_pyaudio_device_index(card_number):
+    """
+    Maps the ALSA card number to the corresponding PyAudio device index.
+
+    Parameters:
+    - card_number (str): The ALSA card number as a string.
+
+    Returns:
+    - int: The PyAudio device index if found, else None.
+    """
+    p = pyaudio.PyAudio()
+    device_index = None
+    for i in range(p.get_device_count()):
+        info = p.get_device_info_by_index(i)
+        # You might need to adjust the matching criteria based on your device's name
+        if f"Card {card_number}" in info['name']:
+            device_index = i
+            print(f"Matching PyAudio device index found: {i} for Card {card_number}")
+            break
+    p.terminate()
+    if device_index is None:
+        print(f"No PyAudio device found for Card {card_number}")
+    return device_index
 
 def get_position_description(x, y, width, height):
     """
@@ -524,7 +547,7 @@ def parse_detection_sentence(sentence):
 
 
 
-def get_wm8960_card_number():
+def get_audio_card_number():
     print("Finding USB Audio Device card number...")
     result = subprocess.run(["aplay", "-l"], stdout=subprocess.PIPE, text=True)
     match = re.search(r"card (\d+): Device", result.stdout)
@@ -537,34 +560,38 @@ def get_wm8960_card_number():
         return None
 def set_max_volume(card_number):
     subprocess.run(["amixer", "-c", card_number, "sset", 'Speaker', '100%'], check=True)
-# Get the correct sound device for the WM8960 sound card
-wm8960_card_number = get_wm8960_card_number()
-#set_max_volume(wm8960_card_number)
-print(wm8960_card_number)
+# Get the correct sound device for the audio sound card
+#audio_card_number = get_audio_card_number()
+audio_card_number = 1
+audio_device_index = get_pyaudio_device_index(audio_card_number)
+#set_max_volume(audio_card_number)
+print(audio_card_number)
 def handle_playback(stream):
     global move_stopper
     global is_transcribing
-    global wm8960_card_number
+    global audio_card_number
     with open('playback_text.txt', 'r') as file:
         text = file.read().strip()
-        if text:
-            print("Playback text found, initiating playback...")
-            stream.stop_stream()
-            is_transcribing = True
+    open('playback_text.txt', 'w').close()
+    if text:
+        print("Playback text found, initiating playback...")
+        stream.stop_stream()
+        is_transcribing = True
 
-            # Generate speech from text
-            subprocess.call(['espeak', '-v', 'en-us', '-s', '180', '-p', '100', '-a', '200', '-w', 'temp.wav', text])
+        # Generate speech from text
+        subprocess.call(['espeak', '-v', 'en-us', '-s', '180', '-p', '130', '-a', '200', '-w', 'temp.wav', text])
 
-            set_max_volume(wm8960_card_number)
-            subprocess.check_call(["aplay", "-D", "plughw:{}".format(wm8960_card_number), 'temp.wav'])
-            os.remove('temp.wav')
-            open('playback_text.txt', 'w').close()
-            stream.start_stream()
-            is_transcribing = False
-            print("Playback completed.")
-            move_stopper = False
-            return True
-    return False
+        set_max_volume(audio_card_number)
+        subprocess.check_call(["aplay", "-D", "plughw:{}".format(audio_card_number), 'temp.wav'])
+        os.remove('temp.wav')
+        
+        stream.start_stream()
+        is_transcribing = False
+        print("Playback completed.")
+        move_stopper = False
+        return True
+    else:
+        return False
 
 
 
@@ -602,7 +629,14 @@ def process_audio_data(data_buffer, recognizer, sample_width):
 
 def listen_and_transcribe():
     global is_transcribing
-    stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+    global audio_device_index  # Ensure this is accessible within the function
+    # Open the audio stream with the specified device index
+    stream = p.open(format=FORMAT,
+                    channels=CHANNELS,
+                    rate=RATE,
+                    input=True,
+                    frames_per_buffer=CHUNK,
+                    input_device_index=audio_device_index)
     print("Audio stream opened for transcription.")
     speech_frames = []
     non_speech_count = 0
