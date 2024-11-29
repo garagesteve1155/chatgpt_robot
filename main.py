@@ -561,8 +561,7 @@ def get_audio_card_number():
 def set_max_volume(card_number):
     subprocess.run(["amixer", "-c", card_number, "sset", 'Speaker', '100%'], check=True)
 # Get the correct sound device for the audio sound card
-#audio_card_number = get_audio_card_number()
-audio_card_number = 1
+audio_card_number = get_audio_card_number()
 audio_device_index = get_pyaudio_device_index(audio_card_number)
 #set_max_volume(audio_card_number)
 print(audio_card_number)
