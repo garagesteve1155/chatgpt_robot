@@ -11,7 +11,7 @@ def modify_file(file_path, search_exp, replace_exp):
     modified_data = re.sub(search_exp, replace_exp, data)
     with open(file_path, 'w') as file:
         file.write(modified_data)
-
+"""
 def set_default_audio_device(card_number):
     config = f'''
 pcm.!default {{
@@ -54,10 +54,10 @@ def check_and_modify_boot_config():
         print(f"{boot_config} modified successfully.")
     except Exception as e:
         print(f"Failed to modify {boot_config}: {e}")
-
+"""
 def check_and_modify_modules():
     modules_file = "/etc/modules"
-    required_modules = ["snd_soc_wm8960", "snd_soc_bcm2835_i2s", "i2c-dev"]
+    required_modules = ["snd_soc_bcm2835_i2s", "i2c-dev"]
 
     try:
         with open(modules_file, 'r') as file:
@@ -74,7 +74,7 @@ def check_and_modify_modules():
         print(f"{modules_file} updated successfully.")
     except Exception as e:
         print(f"Failed to update {modules_file}: {e}")
-
+"""
 def get_wm8960_card_number():
     print("Finding WM8960 Audio HAT card number...")
     result = subprocess.run(["aplay", "-l"], stdout=subprocess.PIPE, text=True)
@@ -86,13 +86,13 @@ def get_wm8960_card_number():
     else:
         print("WM8960 Audio HAT not found.")
         return None
-
+"""
 def install_package(package):
     subprocess.check_call(["sudo", "pip3", "install", package])
 
 def install_apt_package(package):
     subprocess.check_call(["sudo", "apt", "install", "-y", package])
-
+"""
 def setup_waveshare_audio_hat():
     print("Setting up Waveshare WM8960 Audio HAT...")
     
@@ -141,12 +141,12 @@ def setup_waveshare_audio_hat():
         subprocess.check_call(["sudo", "reboot"])
     else:
         print("Error: install.sh script not found!")
-
+"""
 import wave
 import audioop
 
 import subprocess
-
+"""
 def test_audio(card_number):
     print("Testing audio playback using espeak...")
 
@@ -208,7 +208,7 @@ def modify_install_sh(script_path):
     with open(script_path, 'w') as file:
         file.write(script_content)
     print("Modification of install.sh completed.")
-
+"""
 def test_packages():
     print("Testing installed packages...")
     packages = ["pyaudio", "numpy", "speech_recognition", "webrtcvad", "requests", "bluetooth", "cv2"]
@@ -405,15 +405,17 @@ def main():
         install_package("requests")
         install_package("pybluez")  # For Bluetooth
         subprocess.check_call(["sudo", "wget", "https://raw.githubusercontent.com/garagesteve1155/chatgpt_robot/main/main.py"])
-        setup_waveshare_audio_hat()  # Install and setup the audio HAT
+        #setup_waveshare_audio_hat()  # Install and setup the audio HAT
     
     elif args.mode == 'test':
         setup_bluetooth()
-        wm8960_card_number = get_wm8960_card_number()
+        #wm8960_card_number = get_wm8960_card_number()
         time.sleep(5)
+        """
         if wm8960_card_number:
             test_audio(wm8960_card_number)
             time.sleep(5)
+        """
         test_packages()
         time.sleep(5)
         test_camera()
