@@ -194,10 +194,12 @@ def get_pyaudio_device_index(card_number):
     """
     p = pyaudio.PyAudio()
     device_index = None
+    print(p.get_device_count())
     for i in range(p.get_device_count()):
         info = p.get_device_info_by_index(i)
+        print(info)
         # You might need to adjust the matching criteria based on your device's name
-        if f"Card {card_number}" in info['name']:
+        if f"USB" in info['name']:
             device_index = i
             print(f"Matching PyAudio device index found: {i} for Card {card_number}")
             break
@@ -1140,8 +1142,8 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
             continue  # Skip entries that don't match the expected format
 
         timestamp, content = timestamp_and_content
-
-        if "Prompt:" in content:
+        p_or_r = content.split(':')[0]
+        if p_or_r == "Prompt":
             # User message
             message_content = content.split(": ", 1)[-1]
             payload["messages"].append({
@@ -1152,7 +1154,7 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
                 "role": "user",
                 "content": message_content.strip()
             })
-        elif "Response:" in content:
+        elif p_or_r == "Response":
             # Assistant message
             message_content = content.split(": ", 1)[-1].strip()
             payload["messages"].append({
@@ -1246,8 +1248,8 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
     with open('memories/'+str(the_time).replace('/','-').replace(':','-').replace(' ','_')+'.txt','w+') as f:
         f.write("PROMPT: \n\n\n"+str(payload2)+"\n\n\n\nRESPONSE: \n\n\n"+str(response.json()["choices"][0]["message"]["content"]))
     #add prompt and response to history
-    chat_history.append('Time: ' + str(the_time) + ' - ' + "PROMPT:"+str(dynamic_data2))
-    chat_history.append('Time: ' + str(the_time) + ' - ' + "RESPONSE:"+str(response.json()["choices"][0]["message"]["content"]))
+    chat_history.append('Time: ' + str(the_time) + ' - ' + "PROMPT: "+str(dynamic_data2))
+    chat_history.append('Time: ' + str(the_time) + ' - ' + "RESPONSE: "+str(response.json()["choices"][0]["message"]["content"]))
     return str(response.json()["choices"][0]["message"]["content"]), history #return new history
 
 
