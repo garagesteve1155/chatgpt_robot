@@ -182,31 +182,6 @@ def estimate_distance(focal_length, real_height, pixel_height):
 # -----------------------------------
 # 4. Position and Size Description Functions
 # -----------------------------------
-def get_pyaudio_device_index(card_number):
-    """
-    Maps the ALSA card number to the corresponding PyAudio device index.
-
-    Parameters:
-    - card_number (str): The ALSA card number as a string.
-
-    Returns:
-    - int: The PyAudio device index if found, else None.
-    """
-    p = pyaudio.PyAudio()
-    device_index = None
-    print(p.get_device_count())
-    for i in range(p.get_device_count()):
-        info = p.get_device_info_by_index(i)
-        print(info)
-        # You might need to adjust the matching criteria based on your device's name
-        if f"USB" in info['name']:
-            device_index = i
-            print(f"Matching PyAudio device index found: {i} for Card {card_number}")
-            break
-    p.terminate()
-    if device_index is None:
-        print(f"No PyAudio device found for Card {card_number}")
-    return device_index
 
 def get_position_description(x, y, width, height):
     """
@@ -564,7 +539,6 @@ def set_max_volume(card_number):
     subprocess.run(["amixer", "-c", card_number, "sset", 'Speaker', '100%'], check=True)
 # Get the correct sound device for the audio sound card
 audio_card_number = get_audio_card_number()
-audio_device_index = get_pyaudio_device_index(audio_card_number)
 #set_max_volume(audio_card_number)
 print(audio_card_number)
 def handle_playback(stream):
@@ -636,8 +610,7 @@ def listen_and_transcribe():
                     channels=CHANNELS,
                     rate=RATE,
                     input=True,
-                    frames_per_buffer=CHUNK,
-                    input_device_index=audio_device_index)
+                    frames_per_buffer=CHUNK)
     print("Audio stream opened for transcription.")
     speech_frames = []
     non_speech_count = 0
