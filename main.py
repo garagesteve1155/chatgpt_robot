@@ -15,10 +15,8 @@ import random
 import speech_recognition as sr
 import webrtcvad
 import pyaudio
-import json
 from picamera2 import Picamera2
 import math
-import heapq
 import glob
 
 def clear_files_in_folder(folder_path):
@@ -34,7 +32,6 @@ def clear_files_in_folder(folder_path):
 folder_path = 'Pictures/'
 clear_files_in_folder(folder_path)
 move_set = []
-camera_horizontal_fov = 160.0
 
 
 # Initialize the recognizer and VAD with the highest aggressiveness setting
@@ -47,8 +44,7 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 16000
 SAMPLE_WIDTH = pyaudio.PyAudio().get_sample_size(FORMAT)
-def timeout_handler(signum, frame):
-    raise TimeoutError("Operation timed out")
+
 
 
 p = pyaudio.PyAudio()
@@ -460,70 +456,6 @@ def yolo_detect():
 
     except Exception as e:
         print(f"Error in yolo_detect: {e}")
-
-
-
-
-
-def parse_yolo_detections_from_file(filename):
-    yolo_detections = []
-    with open(filename, 'r') as file:
-        lines = file.readlines()
-        for line in lines:
-            line = line.strip()
-            if line:
-                detection_info = parse_detection_sentence(line)
-                if detection_info:
-                    yolo_detections.append(detection_info)
-    return yolo_detections
-
-def parse_detection_sentence(sentence):
-    try:
-        # Extract label
-        label_match = re.search(r'\b(?:a|an|the)\s+(\w+)', sentence)
-        if label_match:
-            label = label_match.group(1).lower()
-        else:
-            return None
-
-        # Extract distance
-        distance_match = re.search(r'about\s+([0-9.]+)\s+meters', sentence)
-        if distance_match:
-            distance = float(distance_match.group(1)) * 100  # Convert to cm
-        else:
-            return None
-
-        # Extract angle from movement suggestion
-        angle = 0.0  # Default angle
-        if 'Turn Left' in sentence:
-            angle_match = re.search(r'Turn Left\s+(\d+)\s+Degrees', sentence)
-            if angle_match:
-                angle = -float(angle_match.group(1))  # Negative for left
-        elif 'Turn Right' in sentence:
-            angle_match = re.search(r'Turn Right\s+(\d+)\s+Degrees', sentence)
-            if angle_match:
-                angle = float(angle_match.group(1))
-
-        detection_info = {
-            'label': label,
-            'distance': distance,
-            'angle': angle
-        }
-        return detection_info
-
-    except Exception as e:
-        print(f"Error parsing detection sentence: {e}")
-        return None
-
-
-
-
-
-
-
-
-
-
 def get_audio_card_number():
     print("Finding USB Audio Device card number...")
     result = subprocess.run(["aplay", "-l"], stdout=subprocess.PIPE, text=True)
@@ -604,7 +536,6 @@ def process_audio_data(data_buffer, recognizer, sample_width):
 
 def listen_and_transcribe():
     global is_transcribing
-    global audio_device_index  # Ensure this is accessible within the function
     # Open the audio stream with the specified device index
     stream = p.open(format=FORMAT,
                     channels=CHANNELS,
@@ -1224,131 +1155,6 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
     chat_history.append('Time: ' + str(the_time) + ' - ' + "PROMPT: "+str(dynamic_data2))
     chat_history.append('Time: ' + str(the_time) + ' - ' + "RESPONSE: "+str(response.json()["choices"][0]["message"]["content"]))
     return str(response.json()["choices"][0]["message"]["content"]), history #return new history
-
-
-def send_text_to_gpt4_convo(history, text):
-    
-    print('getting yolo')
-    with open('output.txt','r') as file:
-        yolo_detections = file.read()
-    now = datetime.now()
-    the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-
-    print('headers')
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-
-    print('battery')
-    with open('batt_per.txt','r') as file:
-        percent = file.read()
-    print('distance')
-    while True:
-        try:
-            with open('current_distance.txt','r') as file:
-                distance = float(file.read())
-            print('got distance')
-            
-            break
-        except Exception as e:
-            print(e)
-            time.sleep(0.1)
-            continue
-    print('putting together payload')
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            # System message with initial context and relevant data
-            {
-            "role": "system",
-            "content": (
-                f"You are a 4-wheeled mobile Raspberry Pi and Arduino robot fully controlled by ChatGPT (specifically GPT-4o).\n"
-                f"Your software has 2 threads, the convo thread and the movement thread. You are the convo thread. You can either respond with what you want to say. Dont say any asterisk stuff. Just speak normal.\n"
-                f"Keep your response no longer than one paragraph and just respond like a normal person. Don't narrate your moves and whatnot.\n"
-                f"If the name of the current user has not been provided by the user within the current chat history, you must ask their name so you know who you are talking to. If you see multiple people, ask who everyone is if you dont already know.\n"
-                f"Do not narrate movements and whatnot. Just respond with an actual response like a person would say and then let the movement thread handle the actual movement commands.\n"
-
-                
-            
-        
-            )}
-        ]
-    }
-    print('parsing history')
-    # Now, parse the session history and add messages accordingly
-    for entry in history:
-        timestamp_and_content = entry.split(" - ", 1)
-        if len(timestamp_and_content) != 2:
-            continue  # Skip entries that don't match the expected format
-
-        timestamp, content = timestamp_and_content
-
-        if "User Greeting:" in content or "Prompt heard from microphone" in content:
-            # User message
-            message_content = content.split(": ", 1)[-1]
-            payload["messages"].append({
-                "role": "user",
-                "content": message_content.strip()
-            })
-        else:
-            # Assistant message or other data
-            message_content = content.strip()
-            payload["messages"].append({
-                "role": "assistant",
-                "content": message_content
-            })
-
-
-    
-
-
-
-
-    print('dynamic data')
-    # Finally, include the current prompt as the latest user message
-    payload["messages"].append({
-        "role": "user",
-        "content": f"Your battery percentage is: {percent}%.\n\nThe current time and date is: {the_time}.\n\nYour camera is currently pointed {camera_vertical_pos}.\n\nThe current YOLO visual data from your camera and the movement choices necessary to center your camera on each specific object (This is what you currently see. If its blank then no YOLO detections have been made on this frame): {yolo_detections}\n\nThe current distance in CM to any yolo object in the center of the image: {str(distance)}\n\n{text.strip()}"
-    })
-
-    # Include the max_tokens parameter
-    payload["max_tokens"] = 200
-
-    
-    
-    print('getting response')
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    print('returning response')
-    return response.json()["choices"][0]["message"]["content"]
-
-
-
-
-
-    
-
-    
-
-
-def say_greeting(last_phrase):
-    global chat_history
-    global last_time
-    now = datetime.now()
-    
-    the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-    print('got time')
-   
-    text = str(send_text_to_gpt4_convo(chat_history, last_phrase))
-    print('got gpt response')
-    print('added to history')
-    last_time = time.time()
-
-    file = open('playback_text.txt', 'w+')
-    file.write(text)
-    file.close()
-    print('playback text saved')
-    
 
 def get_last_phrase():
 
