@@ -1482,6 +1482,7 @@ def movement_loop(camera):
                                     movement_response = 'No Movement ~~ Follow User failed. Must be detecting person first.'
                                     follow_user = False
                                     yolo_find = True
+                                    follow_user_was_true = True
                                     nav_object = 'person'
                                     scan360 = 0
                                     break
