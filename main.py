@@ -60,7 +60,9 @@ file.close()
 file = open('last_phrase2.txt','w+')
 file.write('')
 file.close()
-
+file = open('last_phrase3.txt','w+')
+file.write('')
+file.close()
 # Dictionary of known object heights (in meters)
 known_object_heights = {
     'person': 1.7,
@@ -503,16 +505,7 @@ def handle_playback(stream):
 
 
 
-def filter_low_volume(audio_data):
-    audio_np = np.frombuffer(audio_data, dtype=np.int16)
-    the_list.append(np.max(np.abs(audio_np)))
-    if len(the_list) > 1000:
-        del the_list[0]
-    the_average = int(sum(the_list) / len(the_list))
-    the_average = the_average + (the_average * 0.17)
-    if np.max(np.abs(audio_np)) < the_average:
-        return b'\0' * len(audio_data)
-    return audio_data
+
 
 def process_audio_data(data_buffer, recognizer, sample_width):
     if data_buffer:
@@ -523,12 +516,12 @@ def process_audio_data(data_buffer, recognizer, sample_width):
             text = recognizer.recognize_google(audio)
           
             if text.strip().lower().replace(' ','') != '':
-                file = open('last_phrase.txt', 'w+')
-                file.write(text)
-                file.close()
-
+                print(text)
                 file = open('playback_text.txt', 'w+')
                 file.close()
+                speech_response_process(text)
+
+                
             else:
                 pass
         except Exception as e:
@@ -556,7 +549,6 @@ def listen_and_transcribe():
 
         if not is_transcribing:
             frame = stream.read(CHUNK, exception_on_overflow=False)
-            frame = filter_low_volume(frame)
             is_speech = vad.is_speech(frame, RATE)
             speech_frames.append(frame)
             if is_speech:
@@ -909,12 +901,22 @@ def capture_image(camera):
     # Return the padded, square image
     return padded_image
 
-def describe_image():
+
+
+def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
+    global camera_vertical_pos
     
+    from datetime import datetime
+    now = datetime.now()
+    the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+    with open('output.txt', 'r') as file:
+        yolo_detections = file.read()
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
 
-
-    # Read the original image
-    image = cv2.imread('this_temp.jpg')
+    image = cv2.imread('output.jpg')
 
     # Resize the image to 320x320 pixels
     resized_image = cv2.resize(image, (320, 320))
@@ -925,67 +927,6 @@ def describe_image():
         base64_image = base64.b64encode(buffer).decode('utf-8')
     else:
         print("Failed to encode image.")
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-
-    with open("last_phrase2.txt","r") as f:
-        phrase_now = f.read()
-    with open("last_phrase2.txt","w+") as f:
-        f.write('')
-
-
-    # Initialize the payload with the system message with static instructions
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            # The session history will be added here as individual messages
-        ],
-    }
-
-    if phrase_now != '':
-        phrase_now = 'You have just heard this from your microphone so use this as additional context for your response: ' + phrase_now
-    else:
-        pass
-    # Append the dynamic data as the last user message
-    payload["messages"].append({
-        "role": "user",
-        "content": [{
-            "type": "text",
-            "text": "This image is from the front camera on a small robot. The camera is from a view of only a few inches above the ground. Please describe the scene in 3 sentences or less so the robot knows what it sees. "+phrase_now
-        },
-        {
-            "type": "image_url",
-            "image_url": {
-                "url": f"data:image/jpeg;base64,{base64_image}"
-            }
-        }]
-        
-    })
-                
-
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    print('\n\n\n\nImage Description: \n' + str(response.json()["choices"][0]["message"]["content"]))
-    with open('scene.txt','w+') as f:
-        f.write(str(response.json()["choices"][0]["message"]["content"]))
-
-def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
-    global camera_vertical_pos
-    
-    from datetime import datetime
-    now = datetime.now()
-    the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-    with open('output.txt', 'r') as file:
-        yolo_detections = file.read()
-    with open('scene.txt', 'r') as file:
-        scene_description = file.read()
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-
-
 
     with open('current_distance.txt','r') as file:
         current_distance = float(file.read())
@@ -993,9 +934,13 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
     the_time = now.strftime("%m/%d/%Y %H:%M:%S")
 
 
-
+    with open('batt_cur.txt','r') as file:
+        current = float(file.read())        
     # Original response_choices string
-    response_choices = "Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, Do A Set Of Multiple Movements, Raise Camera Angle, Lower Camera Angle, Follow User, Say Something, Find Unseen Yolo Object, Focus Camera On Specific Yolo Object, Navigate To Specific Yolo Object, Alert User, No Movement, End Conversation, Good Bye.\n\n"
+    if current < 0.0:
+        response_choices = "Move Forward One Inch, Move Forward One Foot, Move Backward, Turn Left 15 Degrees, Turn Left 45 Degrees, Turn Right 15 Degrees, Turn Right 45 Degrees, Do A Set Of Multiple Movements, Raise Camera Angle, Lower Camera Angle, Follow User, Say Something, Find Unseen Yolo Object, Focus Camera On Specific Yolo Object, Navigate To Specific Yolo Object, Alert User, No Movement, End Conversation, Good Bye.\n\n"
+    else:
+        response_choices = "Raise Camera Angle, Lower Camera Angle, Say Something, Focus Camera On Specific Yolo Object, Alert User, No Movement, End Conversation, Good Bye.\n\n"
 
     # Step 1: Clean the string by removing trailing newlines and the period
     clean_choices = response_choices.strip().rstrip('.')
@@ -1023,7 +968,10 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
         failure = 'Your last response choice, ' + failed + ', failed to execute.'
     else:
         failure = 'Your last response choice executed successfully.'
-
+    if current < 0.0:
+        pass
+    else:
+        response_choices = "You are currently on the charger so you cannot do any wheel movements so here are your current Response Choices: " + response_choices
 
 
     # Initialize the payload with the system message with static instructions
@@ -1112,8 +1060,8 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
         f"The current date and time is: {the_time}\n\n"
         f"You have a camera and an HCSR04 distance sensor pointing in the same direction as the camera, and the distance sensor detects the distance to whatever object or obstacle that the visual description says you are centered on. Here is the distance it currently says: {current_distance}\n\n"
         f"Your camera is currently pointed {camera_vertical_pos}.\n\n"
-        f"Current Camera Image Scene Description:\n{scene_description}\n\n"
         f"Current Camera Image YOLO Detections (These are not targets yet, they are only what is detected in the camera image currently:\n{yolo_detections}\n\n"
+        "The image included in this prompt is the Current Camera Image (what you, the robot, currently see).\n\n"
         "You must make connections between all this data as well as session history data when choosing your response."
         f"{phrase}\n\n"
     )
@@ -1122,7 +1070,6 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
         f"The current date and time is: {the_time}\n\n"
         f"Your camera is currently pointed {camera_vertical_pos}.\n\n"
         f"Forward Distance Sensor: {current_distance}\n\n"
-        f"Current Camera Image Scene Description:\n{scene_description}\n\n"
         f"Current Camera Image YOLO Detections (These are not targets yet, they are only what is detected in the camera image currently:\n{yolo_detections}\n\n"
         f"{phrase}\n\n"
     )
@@ -1133,6 +1080,12 @@ def send_text_to_gpt4_move(history,percent, current_distance1, phrase, failed):
         "content": [{
             "type": "text",
             "text": dynamic_data
+        },
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/jpeg;base64,{base64_image}"
+            }
         }]
         
     })
@@ -1202,7 +1155,302 @@ output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers().flatt
 move_stopper = False
 
 
+def speech_response_process(last_phrase2):
+    global chat_history
+    global net
+    global output_layers
+    global classes
+    global move_stopper
+    global camera_vertical_pos
 
+    global move_set
+    global yolo_find
+    global nav_object
+    global yolo_nav  
+    global follow_user
+    global scan360
+    global failed_response
+    ina219 = INA219(addr=0x42)
+    last_time = time.time()
+    failed_response = ''
+    movement_response = ' ~~ '
+    move_stopper = True
+    yolo_look = False
+    if yolo_find:
+        current_mode = 'Find Object Mode'
+    elif yolo_nav:
+        current_mode = 'Navigate To Object Mode'
+    elif follow_user:
+        current_mode = 'Follow User Mode'
+    else:
+        current_mode = 'Not Currently In A Mode'
+
+    try:
+
+      
+        with open("last_phrase2.txt","w+") as f:
+            f.write(last_phrase2)
+        with open("last_phrase3.txt","w+") as f:
+            f.write(last_phrase2)
+        last_phrase2 = 'You just heard this prompt from your microphone. Do not repeat this prompt, actually respond. DO NOT SAY THIS, RESPOND TO IT INSTEAD WITH EITHER SPEECH OR ANOTHER OF THE AVAILABLE RESPONSE CHOICES. Respond with either Say Something or the correct Response Choice. You absolutely must respond to this with Say Something or the correct Response Choice. DONT REPEAT WHAT IS SAID NEXT: ' + last_phrase2
+
+        move_set = []
+        now = datetime.now()
+        the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+  
+        while True:
+            try:
+
+                distance = int(read_distance_from_arduino())
+                with open('current_distance.txt','w+') as f:
+                    f.write(str(distance))
+                break
+            except:
+                print(traceback.format_exc())
+                time.sleep(60)
+                continue
+   
+       
+        
+        
+        current = ina219.getCurrent_mA() 
+        bus_voltage = ina219.getBusVoltage_V()
+        per = (bus_voltage - 6) / 2.4 * 100
+        if per > 100: per = 100
+        if per < 0: per = 0
+        per = (per * 2) - 100
+        with open('batt_per.txt','w+') as file:
+            file.write(str(per))
+        with open('batt_cur.txt','w+') as file:
+            file.write(str(current))
+        
+        if per < 10.0:
+            try:
+                last_time = time.time()
+                image_folder = 'Pictures/'  # Replace with the path to your image folder
+                output_video = 'Videos/'+str(the_time).replace('/','-').replace(':','-').replace(' ','_')+'.avi'  # Change the extension to .avi
+                create_video_from_images(image_folder, output_video)
+      
+                print('ending convo')
+                chat_history = []
+                
+                return None
+            except Exception as e:
+                print(traceback.format_exc())
+                return None
+        else:
+            pass
+    
+        try:
+            now = datetime.now()
+            the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+
+            movement_response, chat_history = send_text_to_gpt4_move(chat_history, per, distance, last_phrase2, failed_response)
+            movement_response = movement_response.replace('RESPONSE:','').replace('Response:','').replace('Response Choice: ','').replace('Movement Choice at this timestamp: ','').replace('Response Choice at this timestamp: ','').replace('Attempting to do movement response choice: ','')
+
+            try:
+                print("\nPercent:       {:3.1f}%".format(per))
+                print('\nCurrent Distance: ' + str(distance) + ' cm')
+                print('\nResponse Choice: '+ movement_response.split('~~')[0].strip().replace('.',''))
+                print('\nReasoning: '+ movement_response.split('~~')[1].strip())
+               
+
+
+
+            except:
+                print(traceback.format_exc())
+                time.sleep(60)
+            
+            now = datetime.now()
+            the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+
+            current_response = movement_response.split('~~')[0].strip().replace('.','')
+            move_stopper = False
+            now = datetime.now()
+            the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+            last_response = current_response
+            current_response = current_response.lower().replace(' ', '')
+            print(current_response)
+            if current_response == 'moveforward1inch' or current_response == 'moveforwardoneinch':
+                if distance < 15.0:
+                    print('move forward 1 inch failed. Too close to obstacle to move forward anymore')
+                    failed_response = 'Move Forward One Inch, '
+                    yolo_nav = False
+                    move_set = []
+                else:
+                    send_data_to_arduino(["w"], arduino_address)
+                    #if yolo_nav == False and yolo_find == False:
+                    time.sleep(0.1)
+                    send_data_to_arduino(["x"], arduino_address)
+                    failed_response = ''
+                    
+            elif current_response == 'moveforward1foot' or current_response == 'moveforwardonefoot':
+                if distance < 40.0:
+                    print('move forward 1 foot failed. Too close to obstacle to move forward that far')
+                    failed_response = 'Move Forward One Foot, '
+                    yolo_nav = False
+                    move_set = []
+                else:
+                    send_data_to_arduino(["w"], arduino_address)
+                    #if yolo_nav == False and yolo_find == False:
+                    time.sleep(0.5)
+                    send_data_to_arduino(["x"], arduino_address)
+                    failed_response = ''
+            elif current_response == 'movebackward':
+                send_data_to_arduino(["s"], arduino_address)
+                #if yolo_nav == False and yolo_find == False:
+                time.sleep(0.5)
+                send_data_to_arduino(["x"], arduino_address)
+                failed_response = ''
+            elif current_response == 'turnleft45degrees' or current_response == 'moveleft45degrees':
+                send_data_to_arduino(["a"], arduino_address)
+                #if yolo_nav == False and yolo_find == False:
+                time.sleep(0.15)
+                send_data_to_arduino(["x"], arduino_address)
+                failed_response = ''
+            elif current_response == 'turnleft15degrees' or current_response == 'moveleft15degrees':
+                send_data_to_arduino(["a"], arduino_address)
+                #if yolo_nav == False and yolo_find == False:
+                time.sleep(0.03)
+                send_data_to_arduino(["x"], arduino_address)
+                failed_response = ''
+            elif current_response == 'turnright45degrees' or current_response == 'moveright45degrees':
+                send_data_to_arduino(["d"], arduino_address)
+                #if yolo_nav == False and yolo_find == False:
+                time.sleep(0.15)
+                send_data_to_arduino(["x"], arduino_address)
+                failed_response = ''
+            elif current_response == 'turnright15degrees' or current_response == 'moveright15degrees':
+                send_data_to_arduino(["d"], arduino_address)
+                #if yolo_nav == False and yolo_find == False:
+                time.sleep(0.03)
+                send_data_to_arduino(["x"], arduino_address)
+                failed_response = ''
+            elif current_response == 'turnaround180degrees':
+                send_data_to_arduino(["d"], arduino_address)
+                time.sleep(1)
+                send_data_to_arduino(["x"], arduino_address)
+                failed_response = ''
+            elif current_response == 'doasetofmultiplemovements':
+                move_set = movement_response.split('~~')[1].strip().split(', ')
+                failed_response = ''
+
+            elif current_response == 'raisecameraangle':
+                if camera_vertical_pos == 'up':
+                    print('Raise Camera Angle Failed. Camera angle is already raised as much as possible.')
+                    failed_response = 'Raise Camera Angle, '
+                else:
+                    send_data_to_arduino(["2"], arduino_address)
+                    time.sleep(1.5)
+                    failed_response = ''
+                    
+                    camera_vertical_pos = 'up'
+            elif current_response == 'lowercameraangle':
+                if camera_vertical_pos == 'forward':
+                    print('Lower Camera Angle failed. Camera angle is already lowered as much as possible.')
+                    failed_response = 'Lower Camera Angle, '
+                else:
+                    send_data_to_arduino(["1"], arduino_address)
+                    time.sleep(1.5)
+                    failed_response = ''
+                    
+                    camera_vertical_pos = 'forward'
+
+            elif current_response == 'endconversation' or current_response == 'goodbye':
+                with open('playback_text.txt', 'w') as f:
+                    f.write(movement_response.split('~~')[1].strip())
+            
+                last_time = time.time()
+                image_folder = 'Pictures/'  # Replace with the path to your image folder
+                output_video = 'Videos/'+str(the_time).replace('/','-').replace(':','-').replace(' ','_')+'.avi'  # Change the extension to .avi
+                create_video_from_images(image_folder, output_video)                        
+                print('ending convo')
+                chat_history = []
+                
+            elif current_response == 'nomovement':
+                now = datetime.now()
+                the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+            elif current_response == 'saysomething' or current_response == 'alertuser':
+                now = datetime.now()
+                the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                with open('playback_text.txt','w') as f:
+                    f.write(movement_response.split('~~')[1])
+            elif current_response == 'navigatetospecificyoloobject':
+                nav_object = movement_response.split('~~')[1].strip().lower()
+                now = datetime.now()
+                the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                yolo_nav = True
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                rando_list = [1,2]
+                rando_index = random.randrange(len(rando_list))
+                rando_num = rando_list[rando_index]
+            elif current_response == 'focuscameraonspecificyoloobject':
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["2"], arduino_address)
+                time.sleep(0.1)
+                camera_vertical_pos = 'forward'
+                yolo_look = True
+                yolo_nav = False
+                yolo_find = False
+                follow_user = False
+                now = datetime.now()
+                the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                look_object = movement_response.split('~~')[1]
+            elif current_response == 'followuser':
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["2"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["2"], arduino_address)
+                time.sleep(0.1)
+                camera_vertical_pos = 'up'
+                follow_user = True
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                now = datetime.now()
+                the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+            elif current_response == 'findunseenyoloobject':
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["2"], arduino_address)
+                time.sleep(0.1)
+                camera_vertical_pos = 'forward'
+                now = datetime.now()
+                the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                yolo_find = True
+                yolo_nav = False
+                yolo_look = False
+                follow_user = False
+                scan360 = 0
+                nav_object = movement_response.split('~~')[1]
+                rando_list = [1,2]
+                rando_index = random.randrange(len(rando_list))
+                rando_num = rando_list[rando_index]
+            else:
+                now = datetime.now()
+                the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                print('failed response')
+                    
+                
+                
+        except:
+            print(traceback.format_exc())
+            
+        
+        
+    except:
+        print(traceback.format_exc())
+    print('done')       
 
  
 def movement_loop(camera):
@@ -1246,23 +1494,11 @@ def movement_loop(camera):
             print(traceback.format_exc())
             time.sleep(60)
             continue
-    #print('movement thread start')
+    print('movement thread start')
     while True:
         try:
 
-            last_phrase2 = get_last_phrase()
-            if last_phrase2 != '':
-                print('Last phrase now on movement loop: ' + last_phrase2)
-                with open("last_phrase2.txt","w+") as f:
-                    f.write(last_phrase2)
-                last_phrase2 = 'You just heard this prompt from your microphone. Do not repeat this prompt, actually respond. DO NOT SAY THIS, RESPOND TO IT INSTEAD WITH EITHER SPEECH OR ANOTHER OF THE AVAILABLE RESPONSE CHOICES. Respond with either Say Something or the correct Response Choice. DONT REPEAT WHAT IS SAID NEXT: ' + last_phrase2
-                yolo_nav = False
-                yolo_find = False
-                yolo_look = False
-                follow_user = False
-                move_set = []
-            else:
-                last_phrase2 = 'You have not heard anything from you microphone on this loop of the program, so check the session history for reference of what you should do.'
+            last_phrase2 = 'You have not heard anything from you microphone on this loop of the program, so check the session history for reference of what you should do.'
             now = datetime.now()
             the_time = now.strftime("%m/%d/%Y %H:%M:%S")
             with open('last_distance.txt','w+') as f:
@@ -1278,6 +1514,7 @@ def movement_loop(camera):
                     print(traceback.format_exc())
                     time.sleep(60)
                     continue
+            print('got distance')
             try:
                 frame = capture_image(camera)
                 cv2.imwrite('this_temp.jpg', frame)
@@ -1285,16 +1522,8 @@ def movement_loop(camera):
                 print(traceback.format_exc())
                 time.sleep(60)
                 continue
-            if follow_user == True or yolo_find == True or yolo_nav == True or yolo_look == True:
-                yolo_detect()
-            else:
-                thread1 = threading.Thread(target=describe_image)
-                thread2 = threading.Thread(target=yolo_detect)
-                thread1.start()
-                thread2.start()
-                thread1.join()
-                thread2.join()
-            
+            yolo_detect()
+            print('yolo detect')
             current = ina219.getCurrent_mA() 
             bus_voltage = ina219.getBusVoltage_V()
             per = (bus_voltage - 6) / 2.4 * 100
@@ -1303,9 +1532,10 @@ def movement_loop(camera):
             per = (per * 2) - 100
             with open('batt_per.txt','w+') as file:
                 file.write(str(per))
-
+            with open('batt_cur.txt','w+') as file:
+                file.write(str(current))
             
-            if current > 0.0 or per < 10.0:
+            if per < 10.0:
                 try:
                     last_time = time.time()
                     image_folder = 'Pictures/'  # Replace with the path to your image folder
@@ -1321,11 +1551,7 @@ def movement_loop(camera):
                     break
             else:
                 pass
-            if move_stopper == True:
-                #print('moves stopped')
-                continue
-            else:
-                pass
+            print('battery stuff')
             try:
                 if frame is not None:
                     now = datetime.now()
@@ -1763,7 +1989,10 @@ def movement_loop(camera):
         except:
             print(traceback.format_exc())
             time.sleep(60)
-            
+yolo_nav = False
+yolo_find = False
+yolo_look = False
+follow_user = False
 if __name__ == "__main__":
     try:
         be_still = True
@@ -1809,8 +2038,10 @@ if __name__ == "__main__":
             # Capture and resize the image, returning it as an array
             frame = capture_image(camera)
             cv2.imwrite('this_temp.jpg', frame)  # Save if needed for reference
-            last_phrase = get_last_phrase()
-            
+            with open('last_phrase3.txt','r') as file:
+                last_phrase = file.read()
+            with open('last_phrase3.txt', 'w+') as file:
+                file.write('')
             try:
                 the_index_now = last_phrase.split(' ').index('echo')
                 name_heard = True
@@ -1826,14 +2057,13 @@ if __name__ == "__main__":
                 
 
                 
-                with open('last_phrase.txt', 'w') as file:
-                    file.write(last_phrase)
+              
                 
           
                 print('starting thread')
                 movement_loop(camera)
                 
-            time.sleep(0.05)
+            time.sleep(0.025)
 
     except Exception as e:
         print(traceback.format_exc())
