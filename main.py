@@ -69,7 +69,7 @@ try:
     file.close()
 except:
     server_ip = input('Please input the IP address for your image server (I just use a digitalocean droplet. Make sure the companion script is currently running on the server before this!): ')
-    server_port = int(input('Please input the port for the websocket connection: '))
+    server_port = 8040
     file = open('server_ip.txt','w+')
     file.write(server_ip)
     file.close()
