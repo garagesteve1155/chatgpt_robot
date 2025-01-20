@@ -26,7 +26,7 @@ camera = Picamera2()
 def remove_duplicates(file_path):
     with open(file_path, 'r') as file:
         # Read the known people from the file
-        known_people = file.read().strip()
+        known_people = file.read().strip().lower()
         
     # Split the string into a list of names
     people_list = known_people.split(', ')
@@ -169,7 +169,7 @@ with open('last_prompt.txt', 'w+') as f:
 with open('last_command.txt', 'w+') as f:
     f.write('')
 with open('name_of_person.txt', 'w+') as f:
-    f.write('Unknown Name Of Person')
+    f.write('unknown name of person')
     
 def clear_specific_files(file_list):
     for file_path in file_list:
@@ -1090,7 +1090,7 @@ def yolo_detect(b_sleep, s_count, words, nav, look, follow, find):
             #print(labels)
             #print(confidences)
             start_haar = time.time()
-            print('YOLO TIME: '+format(start_haar- yolo_start1, '.1f'))
+            #print('YOLO TIME: '+format(start_haar- yolo_start1, '.1f'))
             descriptions, upload_peeps = process_high_d(start_haar, boxes, class_ids, confidences, resized_img, center_x_min, center_y_min, center_x_max, center_y_max, center_grid_area, 416, 416)
             with open("output.txt", "w+") as file:
                 file.write('\n'.join(descriptions))
@@ -1359,251 +1359,15 @@ keyword1, keyword2, ... (exactly 10) ~~ description that is exactly 10 words lon
         json=payload
     )
     content = response_api.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-    print(content)
+    #print(content)
 
     s_content = content.split('~~')
     subcat = s_content[0].strip().lower().split(', ')
     words = s_content[1].strip().lower().replace(",","").replace(".","").replace("  "," ").split(' ')
 
     return subcat, words
-
-def prompt_command(prompt):
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-    while True:
-        with open('internal_input.txt', 'r') as f:
-            thinking1 = f.read().strip()
-        if thinking1 == '':
-            time.sleep(0.1)
-            continue
-        else:
-            break
-    command_choices = ["Move Forward One Inch",
-        "Move Forward One Foot",
-        "Move Backward",
-        "Turn Left 15 Degrees",
-        "Turn Left 45 Degrees",
-        "Turn Right 15 Degrees",
-        "Turn Right 45 Degrees",
-        "Raise Camera Angle",
-        "Lower Camera Angle",
-        "Follow Person",
-        "Do Nothing",
-        "Do A Set Of Multiple Movements",
-        "Speak And Do Action",
-        "Find Unseen Yolo Object",
-        "Center Camera On Specific Yolo Object",
-        "Navigate To Specific Yolo Object",
-        "Go To Sleep",
-        "Set Name Of Person",
-        "Set Current Task",
-        "Save Image Of Person"
-    ]
-    choices = '\n'.join(command_choices)
-    dynamic_data = f"""The robot just heard a person say this: {prompt}
-It is currently thinking: {thinking1}
-You must decide which of these commands is the appropriate response to what the person said and what the robot is thinking and your response must be only the command you choose, and no labels or preface:
-{choices}"""
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": dynamic_data
-            }
-        ],
-        "temperature": 0.2,
-    }
-    response_api = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers=headers,
-        json=payload
-    )
-    content = response_api.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-    response_now = content.strip()
-    with open('prompt_intent.txt','w+') as f:
-        f.write(response_now)
-    return response_now
-def thought_command():
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-    while True:
-        with open('internal_input.txt', 'r') as f:
-            thinking1 = f.read().strip()
-        if thinking1 == '':
-            time.sleep(0.1)
-            continue
-        else:
-            break
-    command_choices = ["Move Forward One Inch",
-        "Move Forward One Foot",
-        "Move Backward",
-        "Turn Left 15 Degrees",
-        "Turn Left 45 Degrees",
-        "Turn Right 15 Degrees",
-        "Turn Right 45 Degrees",
-        "Raise Camera Angle",
-        "Lower Camera Angle",
-        "Follow Person",
-        "Do Nothing",
-        "Do A Set Of Multiple Movements",
-        "Speak And Do Action", 
-        "Find Unseen Yolo Object",
-        "Center Camera On Specific Yolo Object",
-        "Navigate To Specific Yolo Object",
-        "Go To Sleep",
-        "Set Name Of Person",
-        "Set Current Task",
-        "Save Image Of Person"
-    ]
-    choices = '\n'.join(command_choices)
-    dynamic_data = f"""The robot is currently thinking: {thinking1}
-You must decide which of these commands is the appropriate response to what the robot is thinking and your response must be only the command you choose, and no labels or preface:
-{choices}"""
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": dynamic_data
-            }
-        ],
-        "temperature": 0.2,
-    }
-    response_api = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers=headers,
-        json=payload
-    )
-    content = response_api.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-    response_now = content.strip()
-   
-    with open('prompt_intent.txt','w+') as f:
-        f.write(response_now)
-    return response_now
-
-def missed_command(mo_comm):
-   
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-
-    command_choices = ["Move Forward One Inch",
-        "Move Forward One Foot",
-        "Move Backward",
-        "Turn Left 15 Degrees",
-        "Turn Left 45 Degrees",
-        "Turn Right 15 Degrees",
-        "Turn Right 45 Degrees",
-        "Raise Camera Angle",
-        "Lower Camera Angle",
-        "Follow Person",
-        "Do Nothing",
-        "Do A Set Of Multiple Movements ~~ <move1, move2, ...>",
-        "Find Unseen Yolo Object ~~ <insert coco object name>",
-        "Center Camera On Specific Yolo Object ~~ <insert coco object name>",
-        "Navigate To Specific Yolo Object ~~ <insert coco object name>",
-        "Go To Sleep",
-        "Set Name Of Person ~~ <insert name of person>",
-        "Set Current Task ~~ <insert The task>",
-        "Save Image Of Person"
-    ]
-    choices = '\n'.join(command_choices)
-    dynamic_data = f"""The robot just said: {mo_comm}
-It was supposed to give the speak and do action command ~~ what to say ~~ any command that it says it is going to do ~~ any extra data for that command (as seen in the list).
-Did the robot say it would do one of the options below, but said Do Nothing after the second set of ~~? If yes, your response must be only the command it said it would do (formatted like the list below), and no labels or preface. If it was not talking about one of these commands, then just say the single word No:
-{choices}"""
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": dynamic_data
-            }
-        ],
-        "temperature": 0.2,
-    }
-    response_api = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers=headers,
-        json=payload
-    )
-    content = response_api.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-    response_now = content.strip()
-    return response_now
-    
-def bad_command(bad_comm):
-   
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-
-    command_choices = ["Move Forward One Inch",
-        "Move Forward One Foot",
-        "Move Backward",
-        "Turn Left 15 Degrees",
-        "Turn Left 45 Degrees",
-        "Turn Right 15 Degrees",
-        "Turn Right 45 Degrees",
-        "Raise Camera Angle",
-        "Lower Camera Angle",
-        "Follow Person",
-        "Do Nothing",
-        "Do A Set Of Multiple Movements ~~ <move1, move2, ...>",
-        "Find Unseen Yolo Object ~~ <insert coco object name>",
-        "Center Camera On Specific Yolo Object ~~ <insert coco object name>",
-        "Navigate To Specific Yolo Object ~~ <insert coco object name>",
-        "Go To Sleep",
-        "Set Name Of Person ~~ <insert name of person>",
-        "Set Current Task ~~ <insert The task>",
-        "Save Image Of Person"
-    ]
-    choices = '\n'.join(command_choices)
-    dynamic_data = f"""The robot just said: {bad_comm}
-It was supposed to choose a command from the choices below, and use the exact wording and formatting from the list:
-{choices}
-
-Please provide the correct command. You cannot say any extra words, preface, or labels. You can only say the correct command, and any extra data that goes along with it if that particular command uses extra data after ~~"""
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": dynamic_data
-            }
-        ],
-        "temperature": 0.2,
-    }
-    response_api = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers=headers,
-        json=payload
-    )
-    print("\nCORRECTED COMMAND TOKENS: "+str(response_api.json()['usage']['prompt_tokens']))
-
-    content = response_api.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-    response_now = content.strip()
-    print('Corrected command:\n'+response_now)
-    return response_now
-    
-    
-
-    
-    
-
-    
-    
-    
-    
-    
 def get_relevant_history(subcategories, description, already_used, c_his, c_prompt):
-    max_contextual = 15
+    max_contextual = 30
     contextual_candidates = []
     all_files = []
     try:
@@ -1710,8 +1474,8 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
             long_match_percent = 0.99
     else:
         pass
-    #print('long_match_percent: '+str(long_match_percent))
-    #print('recent_match_percent: '+str(recent_match_percent))
+    print('long_match_percent: '+format(long_match_percent,'.3f'))
+    print('recent_match_percent: '+format(recent_match_percent,'.3f'))
     with open('long_match_percent.txt', 'w+') as f:
         f.write(str(long_match_percent))
     with open('recent_match_percent.txt', 'w+') as f:
@@ -1996,7 +1760,7 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         differences = sum(1 for x, y in zip(a, b) if x != y)
         # Add the length difference in case they are different lengths
         differences += abs(len(a) - len(b))
-        print('differences: '+str(differences))
+        #print('differences: '+str(differences))
         return differences <= max_diff
 
     
@@ -2008,7 +1772,7 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         current_distance = float(file.read())
     with open("name_of_person.txt","r") as f:
         name_of_person = f.read()
-    if name_of_person == 'Unknown Name Of Person':
+    if name_of_person == 'unknown name of person':
         include_people = True
     else:
         include_people = False
@@ -2071,7 +1835,11 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     else:
         dynamic_data4 = dynamic_data4 + 'My Last Thought: '+internal_input
     with open('current_convo.txt', 'r') as f:
-        current_convo = f.read()
+        all_lines = f.readlines()  # Read the file line by line into a list
+    # Extract the last 10 lines; if there are fewer than 10, this will just return all available lines
+    last_10_messages = all_lines[-50:]
+    # Join them back into a single string
+    current_convo = ''.join(last_10_messages)
     dynamic_data4 = dynamic_data4 + ' - '+responder+' - Task: '+task
     dynamic_data4 = dynamic_data4 + ' - Battery Level: '+str(int(percent))+'%'
     if on_charger == True:
@@ -2089,41 +1857,34 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     else:
         pass
     dynamic_data4 = dynamic_data4 + '\nCURRENT CONVO:\n'+current_convo
-    current_history = relevant_history + recent_history
-    def extract_timestamp(entry):
-      
-        match = re.search(r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}", entry)
-        if match:
-            return datetime.strptime(match.group(), "%m/%d/%Y %H:%M:%S")
-        return None
-    current_history = sorted(
-        current_history,
-        key=lambda entry: extract_timestamp(entry) or datetime.min
-    )
+
     with open('prompt_intent.txt','r') as f:
         intent = f.read()
     if name_of_person == '':
-        name_of_person = 'Unknown Name of Person'
+        name_of_person = 'unknown name of person'
     else:
         pass
-
+    try:
+        if name_of_person != 'unknown name of person':
+            with open(name_of_person+'_remembered_info.txt', 'r') as f:
+                remembered_person_info = f.read().strip()
+        else:
+            remembered_person_info = ''
+    except:
+        remembered_person_info = ''
     #get last datas for each item and only include the specific datapoint in the prompt if it is different than the saved one
 
     current_data = 'Session Started: '+ session_start+'\nCurrent: '+str(the_time)
     current_data_m = ''
     current_data2 = str(the_time)
-    current_data = current_data+'\n- Current Person: '+name_of_person
-    current_data_m = current_data_m+'\n- Current Person: '+name_of_person
-    current_data2 = current_data2+' - Current Person: '+name_of_person    
     if phrase != '*No Mic Input*':
         #save person response to convo
-        current_data = current_data+'\n- Mic Input From "'+name_of_person+'": '+phrase+'\n- I think they want me to '+intent+'.'
-        current_data_m = current_data_m+'\n- Mic Input From "'+name_of_person+'": '+phrase+'\n- I think they want me to '+intent+'.'
+        current_data = current_data+'\n\nCURRENT DATA:\n- Current Person: '+name_of_person+'\n- Mic Input From "'+name_of_person+'": '+phrase
+        current_data_m = current_data_m+'\n\nCURRENT DATA:\n- Current Person: '+name_of_person+'\n- Mic Input From "'+name_of_person+'": '+phrase
         current_data2 = current_data2+' - Mic '+name_of_person+': ' + phrase
     else:
-        current_data = current_data+'\n- My Last Thought: '+internal_input + '\n- I think I should probably choose '+intent
-        current_data_m = current_data_m+'\n- My Last Thought: '+internal_input + '\n- I think I should probably choose '+intent
-        
+        current_data = current_data+'\n- My Last Thought: '+internal_input
+        current_data_m = current_data_m+'\n- My Last Thought: '+internal_input        
     if move_failure != '':
         current_data = current_data + '\n- MY LAST MOVE FAILED:\n- '+ move_failure
         current_data2 = current_data2 + ' - ' + move_failure
@@ -2162,9 +1923,11 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         current_data_m = current_data_m + '\n- On The Charger, Cannot Use Wheels, But I Can Still Speak If Someone Speaks To Me'
     else:
         pass
+
+
     last_10 = 'Summaries of previous 10 sessions before this current session (NOT PART OF THE CURRENT CONVERSATION UNLESS EXPLICITLY REFERENCED!):\n- '+last_10_sessions
-    current_data = current_data + '\n\nCURRENT CONVERSATION (Most recent at bottom of list):\n'+current_convo
-    current_data_m = current_data_m + '\n\nCURRENT CONVERSATION (Most recent at bottom of list):\n'+current_convo
+    current_data = current_data + '\n\nCURRENT CONVERSATION (Most recent at bottom of list. YOU ARE ECHO!):\n'+current_convo
+    current_data_m = current_data_m + '\n\nCURRENT CONVERSATION (Most recent at bottom of list. YOU ARE ECHO!):\n'+current_convo
     
     if dynamic_data4 == '' or char_difference(current_data_m.strip(), last_prompt.strip()):
         prompt_subcategory = []
@@ -2175,7 +1938,7 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         command_counts = []
 
     else:
-        print('getting keywords')
+        #print('getting keywords')
         try:
             prompt_subcategory, prompt_description = prompt_describe(dynamic_data4)
             with open('last_subcategory.txt', 'w+') as f:
@@ -2192,12 +1955,57 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
             bad_counts = []
             bad_comms = []
             command_counts = []
+    #Build remembered info list
+    remembered_info_list = []
+    
+    for memory in relevant_history:
+        try:
+            # Split the memory into lines
+            lines = memory.split('\n')
+            
+            # Find the RESPONSE line
+            response_line = next(line for line in lines if line.startswith('RESPONSE: '))
+            
+            # Extract the JSON-like content of the RESPONSE
+            response_data = response_line.split('RESPONSE: ', 1)[1].strip()
+            
+            # Convert the string to a Python dictionary
+            response_dict = eval(response_data)  # Use eval cautiously; replace with json.loads if possible
+            
+            # Navigate to the 'Remember Information' field
+            remember_info = response_dict.get('mental_commands', {}).get('Remember Information', '')
+            
+            # Extract the actual information if it starts with 'true ~~'
+            if remember_info.startswith('true ~~'):
+                remembered_info = remember_info.split('true ~~', 1)[1].strip()
+                remembered_info_list.append(remembered_info)
+        except Exception as e:
+            # Handle any errors gracefully and log if needed
+            print(f"Error processing memory: {e}")
+            continue
+    
+    # Combine all remembered information into a single string
+    remembered_info = '\n- '.join(remembered_info_list)
 
-
+    remembered_info = 'Contextually Relevant Information I Remember From Past Sessions:\n- '+remembered_info
+    current_history = recent_history
+    def extract_timestamp(entry):
+      
+        match = re.search(r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}", entry)
+        if match:
+            return datetime.strptime(match.group(), "%m/%d/%Y %H:%M:%S")
+        return None
+    current_history = sorted(
+        current_history,
+        key=lambda entry: extract_timestamp(entry) or datetime.min
+    )
     print('Relevant Pairs: ' + str(len(relevant_history)))
     print('Recent Pairs: ' + str(len(recent_history)))
 
-    command_choices = [
+ 
+
+    # Physical Output Commands (movement, camera adjustments, etc.)
+    physical_output_commands = [
         "Move Forward One Inch",
         "Move Forward One Foot",
         "Move Backward",
@@ -2206,20 +2014,35 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         "Turn Right 15 Degrees",
         "Turn Right 45 Degrees",
         "Raise Camera Angle",
-        "Lower Camera Angle",
-        "Follow Person",
-        "Do Nothing",
-        "Do A Set Of Multiple Movements ~~ <move1, move2, ...>",
-        "Speak And Do Action ~~ <what you want to say> ~~ <The correctly worded Command you want to do> ~~ <extra info for other Command choice if required>",
-        "Find Unseen Yolo Object ~~ <coco object name>",
-        "Center Camera On Specific Yolo Object ~~ <coco object name>",
-        "Navigate To Specific Yolo Object ~~ <coco object name>",
-        "Go To Sleep",
-        "Set Name Of Person ~~ <name of person>",
-        "Set Current Task ~~ <The task>",
-        "Save Image Of Person"
+        "Lower Camera Angle"
     ]
 
+    # Speech Commands (only handles spoken output)
+    speech_commands = [
+        "Speak ~~ <what you want to say>"  # Requires extra data
+    ]
+
+    # Mode Commands (robot behavioral modes)
+    mode_commands = [
+        "Follow Person",
+        "Navigate To Specific Yolo Object ~~ <object name>",  # Requires extra data
+        "Center Camera On Specific Yolo Object ~~ <object name>",  # Requires extra data
+        "Find Unseen Yolo Object ~~ <object name>",  # Requires extra data
+        "Go To Sleep"
+    ]
+
+    # Mental Commands (internal state updates)
+    mental_commands = [
+        "Change Name Of Person ~~ <name>",  # Requires extra data
+        "Change Current Task ~~ <task>",  # Requires extra data
+        "Save Image Of Person",  # Does not require extra data
+        "Remember Information ~~ <info>"  # Requires extra data
+    ]
+
+
+
+
+    """
     # **New Logic: Filter out commands with incorrect ratio >= 75%**
     filtered_command_choices = []
     for cmd in command_choices:
@@ -2238,34 +2061,44 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
 
             # Exclude if incorrect ratio is 50% or more
             if incorrect_ratio >= 0.75:
-                print(f"Skipping '{base_cmd}' because it is incorrect {incorrect_ratio*100:.0f}% of the time.")
+                #print(f"Skipping '{base_cmd}' because it is incorrect {incorrect_ratio*100:.0f}% of the time.")
                 continue  # Skip adding this command
 
         # If command not in command_counts or incorrect_ratio < 0.5, include it
         filtered_command_choices.append(cmd)
-
-    # Randomize the filtered command choices
-    random.shuffle(filtered_command_choices)
-    randomized_command_choices = '\n- ' + '\n- '.join(filtered_command_choices)
-    command_choices_str = f'{randomized_command_choices}'
-
-    # Update command_choices to the filtered and randomized list
-    command_choices = command_choices_str
+    """
 
 
+    physical_output_commands_str = '\n- '.join(physical_output_commands)
+    speech_commands_str = '\n- '.join(speech_commands)
+    mode_commands_str = '\n- '.join(mode_commands)
+    mental_commands_str = '\n- '.join(mental_commands)
+    
+    
+    
+    
+    
     system_message = f"""You are Echo, and your physical form is a 4-wheeled mobile RPi and Arduino robot that is controlled from your command choice in your responses.
 The included image url is your current view from the camera. Use this image for any visual context but it is not your main focus. The text is the main focus unless there is a specific need for the image.
 The 'user' session history role is all of your robotic data from sensors, camera, and internal thoughts, memories, and knowledge. The 'assistant' session history role is your responses with the command you chose at that time.
-The image url in the prompt payload is what you currently see from your camera.
+The image url in the prompt payload is what you currently see from your camera. Only reference it if you need to.
 
 RULES FOR RESPONDING:
+- You are Echo! You choose what Echo says. You are in charge of making sure Echo follows the flow of the conversation and chooses the correct command choices.
+- Do not speak about what you see unless explicitly asked about what you see.
+- Do not say you see a person. Its obvious you see a person if you are looking at them.
+- You must pay attention to the Current Conversation, and if you see that you Echo were the last one to speak, then you should wait for a response and not speak again until you get a response.
+- Do not Change the name of the person to what it already is.
+- The Current Conversation has the most recent stuff on the bottom.
+- Do not say you see things unless explicitly asked about it through the Mic Input.
+- Pay attention to the Current Conversation and make sure you don't speak again if Echo has already spoken and not currently received a response yet from the person.
 - Pay attention to the Current Conversation in the prompt and make sure you, Echo, do not speak a bunch without being responded to, and make sure you do not repeat yourself. Wait for the person to respond instead of repeatedly saying a bunch of pointless stuff.
 - You are the one that chooses the responses for Echo in the Current Conversation.
-- Do not just say you see things if there is no reason to say it.
-- You absolutely must adhere to the Response Formatting Required Template! You cannot say anything except your command choice.
-- The only thing the person ever hears from you is when you speak, so all other wording you create must be to yourself.
+- Do not just speak about what you see.
+- You absolutely must adhere to the Response Formatting Required Template!
+- The only thing the person ever hears from you is when you speak, so all other wording you create is only seen by you.
 - Mic Input is the only thing actually said by a person. That is what conversational responses will interact with.
-- If you receive Mic Input, you should respond to it instead of choosing Do Nothing, unless the Mic Input is telling you to do nothing.
+- If you receive Mic Input, you should respond to it, unless the Mic Input is telling you not to respond.
 - Do not repeat the Mic Input, respond to it with normal conversation, as a query.
 - Do not describe the image unless explicitly asked through the Mic Input.
 - You do not have to wait for Mic Input to take action. You are proactive and can act on your own thoughts, but dont speak to your Last Thought.
@@ -2274,18 +2107,67 @@ RULES FOR RESPONDING:
 - YOLO Detections are just general, not contextual. It is your job to decide if they have value to your current situation.
 - Do not tell people you see them just because you see them. That is pointless.
 - You must abide by the Last Thought in the prompts
-- If you want to do multiple movements, choose the command for doing multiple moves. otherwise just choose the specific command you want to execute.
 - Do not set the name of the person to the same thing as what it already is.
+- Only save an image of a person if you dont already have a saved image of them.
+- You must Remember Information as much as possible, but only remember information that will be relevant later, do not remember temporary information.
+- If you are told to remember something, then put that information on Remember Information on your response.
+- Do not speak what you see unless you are explicitly asked!
+- You have to remember information on every single response.
+- You still have to remember information on responses where you speak or do another command.
 
-RESPONSE FORMATTING REQUIRED TEMPLATE (You absolutely must adhere to this response format!):
-<command choice> ~~ <extra data for command choice if required in the Command Choice List>
+RESPONSE STRUCTURE REQUIRED:
+Return a JSON object with four sections:
+1. "physical_output_command": A string containing the chosen physical output command from the list below, or "false" if no output is required.
+2. "speech_command": A string containing the chosen speech command from the list below, or "false" if no speech is required. Include extra data only if the command requires it.
+3. "mode_command": A string containing the chosen mode command from the list below, or "false" if no mode change is required. Include extra data only if the command requires it.
+4. "mental_commands": An object where each key is a mental command from the list below, and the value is:
+   - "false" if the command should not be executed.
+   - "true" if the command should be executed.
+     • If true and extra data is required, append "~~ <extra data>" after "true".
+     • Remember Information absolutely must always be true and with information provided.
 
-You can absolutely only respond with your command choice, and if it requires extra data then include that after the ~~.
+Do not put question marks on any key labels! DO NOT PUT QUESTION MARKS ON ANY OF THE KEYS! Return the exact command names!
 
-You can only choose a command from the list below. If a command is seen in the session history but not in the list below, it cannot be chosen.
-LIST OF CURRENTLY AVAILABLE COMMANDS (YOU ABSOLUTELY MUST CHOOSE ONLY ONE FOR YOUR RESPONSE! YOU MUST WORD AND FORMAT YOUR CHOSEN COMMAND EXACTLY AS IT IS ON THE LIST BELOW!):
-{randomized_command_choices}"""
+You absolutely must include all of these keys in your JSON response! You must include every single key in your response, even if they are false.
 
+PHYSICAL OUTPUT COMMANDS:
+- {physical_output_commands_str}
+
+SPEECH COMMANDS:
+- {speech_commands_str}
+
+MODE COMMANDS:
+- {mode_commands_str}
+
+MENTAL COMMANDS:
+- {mental_commands_str}
+
+Always include **all** command keys, even if their value is `"false"`, and ensure that any command requiring extra data uses the `~~ <extra data>` format correctly.
+
+Your response should **always** include:
+- `physical_output_command`
+- `speech_command`
+- `mode_command`
+- `mental_commands` (with every key included, even if it's `"false"`. Remember Information must always be true.)
+
+Rules:
+- "Remember Information" must always contain meaningful information extracted from the conversation, sensor data, or current context.
+- If there is nothing explicit to remember, infer or generate a general piece of context to store (e.g., session details, tasks, or any recurring information).
+- Do not leave "Remember Information" blank. Always return it as `true ~~ <information>`. Make sure the information is contextually relevant to the current conversation or your general situation.
+- Remember Information must contain valuable knowledge that you can use later.
+
+Do not omit any of these keys."""
+
+    """
+     I should only save an image of a person if I don't already have one.
+steven and brittany are dating
+the sky is blue here on earth
+change name of person should be false if the name of the person is already what you're wanting to change it to
+be more liberal about remembering information
+never let echo repeat itself
+never say that i see someone again
+if echo is the last person to have said something on the current conversation then you cannot say anything until the person has said something
+    """
     no_convo = True
     no_info = True
     dynamic_data2 = str(the_time)
@@ -2301,13 +2183,53 @@ LIST OF CURRENTLY AVAILABLE COMMANDS (YOU ABSOLUTELY MUST CHOOSE ONLY ONE FOR YO
             }
         ],
         "temperature": 0.2,
+        "functions": [
+            {
+                "name": "robot_command",
+                "description": "Returns structured commands with sections for physical output, speech, mode, and mental commands",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "physical_output_command": {
+                            "type": "string",
+                            "enum": physical_output_commands + ["false"]
+                        },
+                        "speech_command": {
+                            "type": "string",
+                            "enum": speech_commands + ["false"]
+                        },
+                        "mode_command": {
+                            "type": "string",
+                            "enum": mode_commands + ["false"]
+                        },
+                        "mental_commands": {
+                            "type": "object",
+                            "properties": {
+                                "Change Name Of Person": {"type": "string"},
+                                "Change Current Task": {"type": "string"},
+                                "Save Image Of Person": {"type": "string"},
+                                "Remember Information": {
+                                    "type": "string",
+                                    "pattern": "true ~~ .+"  # Forces non-empty content after "true ~~"
+                                }
+                            },
+                            "required": ["Remember Information"],  # Make it mandatory
+                            "additionalProperties": False
+                        }
+                    },
+                    "required": ["physical_output_command", "speech_command", "mode_command", "mental_commands"]
+                }
+            }
+        ],
+        "function_call": { "name": "robot_command" }
     }
-
    
     payload["messages"].extend([
         {"role": "user", "content": last_10}
     ])
-    
+    payload["messages"].extend([
+        {"role": "user", "content": remembered_info}
+    ])
     for entry in current_history:
         try:
             user_message, assistant_message = entry.split("\nRESPONSE: ")
@@ -2336,9 +2258,10 @@ LIST OF CURRENTLY AVAILABLE COMMANDS (YOU ABSOLUTELY MUST CHOOSE ONLY ONE FOR YO
                     pass
             else:
                 pass
+    """
     try:
         with open('known_people.txt', 'r') as f:
-            known_people = f.read().split(', ')
+            known_people = f.read().lower().split(', ')
     except:
         known_people = []
 
@@ -2349,21 +2272,15 @@ LIST OF CURRENTLY AVAILABLE COMMANDS (YOU ABSOLUTELY MUST CHOOSE ONLY ONE FOR YO
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": f"The image url below this text is a saved memory image of {person}. Use this to compare against the person you see in the current camera image to figure out who you are talking to. The current camera image is the very last image url in the prompt payload."},
+                        {"type": "text", "text": f"The image url below this text is a saved memory image of {person}. Use this to compare against the person you see in the current camera image to figure out who you are talking to, but only if you don't already know who you are talking to. The current camera image is the very last image url in the prompt payload."},
                         {"type": "image_url", "image_url": {"url": person_image_url}}
                     ]
                 }
             )
         else:
             pass
-    payload["messages"].append(
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": current_data}
-            ]
-        }
-    )
+    """
+
     img_url = 'http://159.89.174.187:8080/public_images/output1.jpg'
     payload["messages"].append(
         {
@@ -2375,7 +2292,14 @@ LIST OF CURRENTLY AVAILABLE COMMANDS (YOU ABSOLUTELY MUST CHOOSE ONLY ONE FOR YO
             ]
         }
     )
-    
+    payload["messages"].append(
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": current_data}
+            ]
+        }
+    )
 
     
     
@@ -2391,29 +2315,75 @@ LIST OF CURRENTLY AVAILABLE COMMANDS (YOU ABSOLUTELY MUST CHOOSE ONLY ONE FOR YO
         gpt_speed += 1
     else:
         command_response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-        full_command = command_response.json().get("choices", [{}])[0].get("message", {}).get("content", "").replace('"','').replace('*','').replace('**','').replace('<','').replace('>','')
+        response_json = command_response.json()
+
+        # Ensuring that the response always includes all necessary keys
+        if "choices" in response_json and "message" in response_json["choices"][0]:
+            function_call_args = response_json["choices"][0]["message"].get("function_call", {}).get("arguments", {})
+            try:
+                function_call_args = json.loads(function_call_args)
+            except json.JSONDecodeError:
+                print("Error: Failed to parse function_call_args as JSON.")
+                function_call_args = {}
+            # Initialize full_command with default "false" values
+            full_command = {
+                "physical_output_command": "false",
+                "speech_command": "false",
+                "mode_command": "false",
+                "mental_commands": {
+                    "Change Name Of Person": "false",
+                    "Change Current Task": "false",
+                    "Save Image Of Person": "false",
+                    "Remember Information": "false"
+                }
+            }
+
+            # Iterate over the keys in full_command to update them if we have data in function_call_args
+            for key in full_command:
+                if key in function_call_args:
+                    value = function_call_args[key]
+                    # Check if it's a dictionary (for "mental_commands")
+                    if isinstance(full_command[key], dict):
+                        # Handle nested dictionary for mental_commands
+                        for mental_key in full_command[key]:
+                            if mental_key in value:
+                                full_command["mental_commands"][mental_key] = value[mental_key]
+                    else:
+                        # For non-dictionary keys (e.g., "physical_output_command", "speech_command", "mode_command")
+                        full_command[key] = value
         with open('last_prompt.txt', 'w+') as f:
             f.write(current_data_m)
         with open('last_command.txt', 'w+') as f:
-            f.write(full_command)
+            f.write(str(full_command))
         gpt_speed = 0
-        try:
-            full_command = full_command.split(': ')[1]
-        except:
-            pass
-        try:
-            line1, reasoning = full_command.split('\n')
-        except:
-            line1 = full_command
-            reasoning = '**'
-        full_command = line1
+        # Assigning the keys in the main dictionary as variables
+        physical_output_command = full_command["physical_output_command"]
+        speech_command = full_command["speech_command"]
+        mode_command = full_command["mode_command"]
+
+        # Loop through the mental_commands dictionary and create variables
+        for key, value in full_command["mental_commands"].items():
+            globals()[key.replace(" ", "_")] = value  # Create a variable with a sanitized name (spaces replaced with underscores)
+
+        # Example: printing the created variables
+        """
+        print(physical_output_command)
+        print(speech_command)
+        print(mode_command)
+        print(Change_Name_Of_Person)
+        print(Change_Current_Task)
+        print(Save_Image_Of_Person)
+        print(Remember_Information)
+        """
+        line1 = full_command
+        reasoning = '**'
         with open('last_move.txt','r') as f:
             last_m = f.read()
 
         try:
-            the_command = full_command.split('~~')[0].strip()
+            the_command = speech_command.split('~~')[0].strip()
         except:
-            the_command = full_command.strip()
+            the_command = speech_command
 
         with open('payload.txt', 'w+') as f:
             f.write(json.dumps(payload, indent=4).replace("\\n","\n"))
@@ -2423,8 +2393,9 @@ LIST OF CURRENTLY AVAILABLE COMMANDS (YOU ABSOLUTELY MUST CHOOSE ONLY ONE FOR YO
             f.write(str(time.time()))
         try:
             print("\nMOVE TOKENS: "+str(command_response.json()['usage']['prompt_tokens'])+' AND TIME: '+ str(time.time()-last_time))
-            print('\n'+current_data)
-            print('\n'+full_command)
+            print('\n'+last_10+'\n'+remembered_info+'\n'+current_data)
+            
+            print('\n'+str(full_command))
         except:
             if char_difference(current_data_m.strip(), last_prompt.strip()):
                 pass
@@ -2455,11 +2426,10 @@ LIST OF CURRENTLY AVAILABLE COMMANDS (YOU ABSOLUTELY MUST CHOOSE ONLY ONE FOR YO
         filename_data = f'{timestamp_formatted}_{description_part}.txt'
         filename_data2 = f'{timestamp_formatted}.txt'
         create_history = False
-        if phrase != '*No Mic Input*' or the_command.lower().strip().replace(' ','') == 'speakanddoaction':
+        if phrase != '*No Mic Input*' or the_command.lower().strip().replace(' ','') == 'speak':
             filename_data = 'cp_-_'+filename_data
         else:
             filename_data = 'ip_-_'+filename_data
-        entire_command = full_command.split('\n')[0]
         filename_data_sub1 = f'History/{sub1}/{filename_data}'
         filename_data_sub2 = f'History/{sub2}/{filename_data}'
         filename_data_sub3 = f'History/{sub3}/{filename_data}'
@@ -2478,7 +2448,7 @@ LIST OF CURRENTLY AVAILABLE COMMANDS (YOU ABSOLUTELY MUST CHOOSE ONLY ONE FOR YO
             c_prompt = current_data2
 
         with open('History_dataset/'+filename_data, 'w+') as f:
-            f.write(str(payload).replace("\\n","\n") + '\nRESPONSE: ' + full_command)
+            f.write(str(payload).replace("\\n","\n") + '\nRESPONSE: ' + str(full_command))
 
         filenames = [filename_data_sub1, filename_data_sub2, filename_data_sub3, filename_data_sub4, filename_data_sub5, filename_data_sub6, filename_data_sub7, filename_data_sub8, filename_data_sub9, filename_data_sub10]
         for filename in filenames:
@@ -2486,32 +2456,28 @@ LIST OF CURRENTLY AVAILABLE COMMANDS (YOU ABSOLUTELY MUST CHOOSE ONLY ONE FOR YO
             if directory and not os.path.exists(directory):
                 os.makedirs(directory, exist_ok=True)
         with open('History/'+filename_data, 'w+') as f:
-            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + full_command)
+            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         with open(filename_data_sub1, 'w+') as f:
-            f.write('PROMPT: ' + current_data + '\nRESPONSE: ' + full_command)
+            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         with open(filename_data_sub2, 'w+') as f:
-            f.write('PROMPT: ' + current_data + '\nRESPONSE: ' + full_command)
+            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         with open(filename_data_sub3, 'w+') as f:
-            f.write('PROMPT: ' + current_data + '\nRESPONSE: ' + full_command)
+            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         with open(filename_data_sub4, 'w+') as f:
-            f.write('PROMPT: ' + current_data + '\nRESPONSE: ' + full_command)
+            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         with open(filename_data_sub5, 'w+') as f:
-            f.write('PROMPT: ' + current_data + '\nRESPONSE: ' + full_command)
+            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         with open(filename_data_sub6, 'w+') as f:
-            f.write('PROMPT: ' + current_data + '\nRESPONSE: ' + full_command)
+            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         with open(filename_data_sub7, 'w+') as f:
-            f.write('PROMPT: ' + current_data + '\nRESPONSE: ' + full_command)
+            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         with open(filename_data_sub8, 'w+') as f:
-            f.write('PROMPT: ' + current_data + '\nRESPONSE: ' + full_command)
+            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         with open(filename_data_sub9, 'w+') as f:
-            f.write('PROMPT: ' + current_data + '\nRESPONSE: ' + full_command)
+            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         with open(filename_data_sub10, 'w+') as f:
-            f.write('PROMPT: ' + current_data + '\nRESPONSE: ' + full_command)
-    if char_difference(current_data_m.strip(), last_prompt.strip()):
-        pass
-    else:
-        mental_thread = threading.Thread(target=send_text_to_gpt4_mental, args=(filename_data, randomized_command_choices, full_command, last_10, filename_data_sub1, filename_data_sub2, filename_data_sub3, filename_data_sub4, filename_data_sub5, filename_data_sub6, filename_data_sub7, filename_data_sub8, filename_data_sub9, filename_data_sub10, full_command, last_m, the_time, current_history, current_data, prompt_subcategory, prompt_description))
-        mental_thread.start()
+            f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
+  
     return full_command, dynamic_data2, dynamic_data3, prompt_description, filename_data_sub1, filename_data_sub2, filename_data_sub3, filename_data_sub4, filename_data_sub5, filename_data_sub6, filename_data_sub7, filename_data_sub8, filename_data_sub9, filename_data_sub10, current_data, system_message, phrase, gpt_speed, filename_data
 def manage_filenames(filename_list):
     try:
@@ -2550,282 +2516,6 @@ def manage_filenames(filename_list):
         # Overwrite the file with the trimmed list
         with open('recent_filenames.txt','w+') as f:
             f.write('\n'.join(summaries))
-def send_text_to_gpt4_mental(f_data, r_choices, f_comm, last_10_ses, file1, file2, file3, file4, file5, file6, file7, file8, file9, file10, move_response, last_one, time_now, history, current, su, de):
-    the_response = move_response
-    headers2 = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-    with open("mental_error.txt","r") as f:
-        m_error = f.read()
-    system_message2 = f"""You are Echo, a 4-wheeled mobile RPi and Arduino robot.
-The 'user' session history role is all of your robotic data from sensors, camera, and internal thoughts, memories, and knowledge. The 'assistant' session history role is the command you chose at that time.
-The image at the image_url is what you saw at the time of only the most recent prompt.
-You must decide if the most recent response was the correct command choice.
-You must not put any extra wording, labels, or prefacing on your response.
-Do not word your response like the responses in the history because those are not your responses.
-
-If the response was the correct command choice, your response now must be only the single word CORRECT.
-If the response was an incorrect command choice, your response must be the reason why it was incorrect, and what a better choice would have been. You must word the response as Echo's own first person viewpoint.
-
-These were the rules it had to follow when choosing its command choice, so make sure it followed the rules (These are not your rules, these are the command chooser's rules):
-- It cannot repeatedly say stuff without getting responses from the person.
-- It was not allowed to just say it sees things if there is no reason to say it.
-- It cannot say anything except the command choice.
-- The only thing the person ever hears from it is when it speaks, so everything else is internal within the robot.
-- Mic Input is the only thing actually said by a person. That is what conversational responses will interact with.
-- If it receives Mic Input, it should respond to it instead of choosing Do Nothing, unless the Mic Input is telling it to do nothing.
-- Do not repeat the Mic Input, respond to it with normal conversation, as a query.
-- Do not describe the image unless explicitly asked through the Mic Input.
-- Any first-person wording within the Mic Data refers to the person that is talking to it.
-- If Mic Input is present, prioritize it over all other data and respond directly to the person.
-- YOLO Detections are just general, not contextual. It is the robot's job to decide if they have value to its current situation.
-- Do not tell people it sees them just because it sees them. That is pointless.
-- It must abide by the Last Thought in the prompts.
-- If it is waiting for a response from the person, then Do Nothing can be an acceptable command choice because that allows it to wait.
-
-It must only choose one of these commands:
-{r_choices}
-
-(END OF THE RULES. THESE ARE NOT YOUR RULES)
-
-You must decide if the most recent session history response correctly followed the command choice rules above.
-For example, if a person said something to you and you chose Do Nothing instead of responding to them, then you would say what was wrong with the response and which choice would have been better.
-You must not respond like the Command Chooser and its rules.
-
-You can only choose CORRECT or say the reason why it was incorrect."""
-    payload2 = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "system",
-                "content": system_message2
-            }
-        ],
-        "temperature": 0.2,
-    }
-
-    payload2["messages"].extend([
-        {"role": "user", "content": last_10_ses}
-    ])
-    count = 0
-    for entry in history:
-        try:
-            user_message, assistant_message = entry.split("\nRESPONSE: ")
-            payload2["messages"].extend([
-                {"role": "user", "content": user_message.strip().replace('PROMPT: ', 'PROMPT ID: '+str(count)+'\n')},
-                {"role": "assistant", "content": 'RESPONSE ID: '+str(count) + ' - ' + assistant_message.strip()}
-            ])
-           
-            count += 1
-        except:
-            if "PROMPT: " in entry:
-                try:
-                    user_message = entry.split("PROMPT: ", 1)[1].strip()
-                    payload2["messages"].append({
-                        "role": "user",
-                        "content": user_message
-                    })
-                except IndexError:
-                    pass
-            elif "RESPONSE: " in entry:
-                try:
-                    assistant_message = entry.split("RESPONSE: ", 1)[1].strip()
-                    payload2["messages"].append({
-                        "role": "assistant",
-                        "content": assistant_message
-                    })
-                except IndexError:
-                    pass
-            else:
-                pass
-    payload2["messages"].extend([
-    {"role": "user", "content": 'PROMPT ID: '+str(count)+'\n'+current},
-    {"role": "assistant", "content": 'RESPONSE ID: '+str(count) + ' - ' + move_response}
-    ])
-    img_url = 'http://159.89.174.187:8080/public_images/output1.jpg'
-    payload2["messages"].append(
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image_url", "image_url": {"url": img_url}
-                }
-            ]
-        }
-    )
-  
-    payload2["messages"].extend([
-        {"role": "user", "content": 'I must decide if the most recent response in my session history was the correct or incorrect command choice. If it was correct, then I will just say the word CORRECT. If it was incorrect, then I must say why the response was wrong.'},
-    ])
-    with open('payload2.txt', 'w+') as f:
-        f.write(json.dumps(payload2, indent=4).replace("\\n","\n"))
-    command_now_1 = requests.post("https://api.openai.com/v1/chat/completions", headers=headers2, json=payload2)
-    print("\nMENTAL TOKENS: "+str(command_now_1.json()['usage']['prompt_tokens']))
-    full_command = command_now_1.json().get("choices", [{}])[0].get("message", {}).get("content", "").replace('"','').replace('*','').replace('**','').replace('<','').replace('>','')
-    print("\nMENTAL: "+full_command)
-
-    with open('History_dataset_mental/'+f_data, 'w+') as f:
-        f.write(json.dumps(payload2, indent=4).replace("\\n","\n") + '\nRESPONSE: ' + full_command)
-
-    with open('internal_input.txt', 'w+') as f:
-        f.write(full_command)
-    if full_command.strip().lower() != 'correct':
-        print('Managing rules because GPT said incorrect')
-        manage_rules(full_command, file1, file2, file3, file4, file5, file6, file7, file8, file9, file10, f_data)
-    return
-def send_text_to_gpt4_mental2(r_choices, f_comm, last_10_ses, file1, file2, file3, file4, file5, file6, file7, file8, file9, file10, move_response, last_one, time_now, history, current, su, de):
-    the_response = move_response
-    headers2 = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-    with open("mental_error.txt","r") as f:
-        m_error = f.read()
-    system_message2 = f"""You are Echo, a 4-wheeled mobile RPi and Arduino robot.
-The 'user' session history role is all of your robotic data from sensors, camera, and internal thoughts, memories, and knowledge. The 'assistant' session history role is the command you chose at that time.
-The image at the image_url is what you saw at the time of only the most recent prompt.
-You must decide if any session history responses that arent already marked with "(INCORRECT RESPONSE)" should be marked as incorrect, or if all responses are currently correct.
-If a response in the session history is already what it should be, then skip it and move to the next, and do not mention it.
-
-You must not put any extra wording, labels, or prefacing on your response.
-Do not word your response like the responses in the history because those are not your responses.
-You must word the response as Echo's own first person viewpoint.
-Do not choose an ID if the session history response was correct.
-If the response for a prompt is already the correct command, ignore it and do not mention it.
-Do not choose an ID if you see "(INCORRECT RESPONSE)" after the command in the session history.
-
-These were the rules it had to follow when choosing its command choice, so make sure it followed the rules (These are not your rules, these are the command chooser's rules):
-- It cannot repeatedly say stuff without getting responses from the person.
-- It was not allowed to just say it sees things if there is no reason to say it.
-- It cannot say anything except the command choice.
-- The only thing the person ever hears from it is when it speaks, so everything else is internal within the robot.
-- Mic Input is the only thing actually said by a person. That is what conversational responses will interact with.
-- If it receives Mic Input, it should respond to it instead of choosing Do Nothing, unless the Mic Input is telling it to do nothing.
-- Do not repeat the Mic Input, respond to it with normal conversation, as a query.
-- Do not describe the image unless explicitly asked through the Mic Input.
-- Any first-person wording within the Mic Data refers to the person that is talking to it.
-- If Mic Input is present, prioritize it over all other data and respond directly to the person.
-- YOLO Detections are just general, not contextual. It is the robot's job to decide if they have value to its current situation.
-- Do not tell people it sees them just because it sees them. That is pointless.
-- It must abide by the Last Thought in the prompts.
-- If it is waiting for a response from the person, then Do Nothing can be an acceptable command choice because that allows it to wait.
-
-It must only choose one of these commands:
-{r_choices}
-
-(END OF THE RULES. THESE ARE NOT YOUR RULES)
-
-You must decide if the session history responses are correctly following the command choice rules above.
-For example, if a person said something to you and you chose Do Nothing instead of responding to them, then you would choose the ID for that prompt and response and say what was wrong with the response.
-You must not respond like the Command Chooser and its rules.
-You must decide if there are any responses that were incorrect and provide data for choosing the correct command in the future.
-You may only choose one incorrect response to mark as incorrect.
-If a response for a prompt is already correct or you already see "(INCORRECT RESPONSE)" after the command, then skip it.
-
-THIS IS HOW YOU MUST RESPOND IF THERE ARE ANY INCORRECT COMMAND RESPONSES:
-<The number of the prompt-response ID for the incorrect response> ~~ <What data to look for in the future to know which command to choose when in the same situation and which possible commands could have been a better choice.>
-
-You may only choose one bad session history response, if there are any that are not right and they dont already have the (INCORRECT RESPONSE) marker.
-
-If all responses in the current session history are correct or you already see "(INCORRECT RESPONSE)" after the command for all incorrect commands, then just say the single word CORRECT as your response.
-You absolutely must not choose the prompt-response ID for responses that are already the correct command!!! Those must be skipped!
-You must only choose the prompt-response ID for any response commands that are a bad command.
-Be very critical of the responses you see, but if they are good or if they are already marked as incorrect then skip that response and move to the next one in the session history until you have gone through the whole session history.
-If the person gives advice, utilize it to generate your response, otherwise you must figure things out on your own."""
-    payload2 = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "system",
-                "content": system_message2
-            }
-        ],
-        "temperature": 0.2,
-    }
-
-    payload2["messages"].extend([
-        {"role": "user", "content": last_10_ses}
-    ])
-    count = 0
-    for entry in history:
-        try:
-            user_message, assistant_message = entry.split("\nRESPONSE: ")
-            payload2["messages"].extend([
-                {"role": "user", "content": user_message.strip().replace('PROMPT: ', 'PROMPT ID: '+str(count)+'\n')},
-                {"role": "assistant", "content": 'RESPONSE ID: '+str(count) + ' - ' + assistant_message.strip()}
-            ])
-           
-            count += 1
-        except:
-            if "PROMPT: " in entry:
-                try:
-                    user_message = entry.split("PROMPT: ", 1)[1].strip()
-                    payload2["messages"].append({
-                        "role": "user",
-                        "content": user_message
-                    })
-                except IndexError:
-                    pass
-            elif "RESPONSE: " in entry:
-                try:
-                    assistant_message = entry.split("RESPONSE: ", 1)[1].strip()
-                    payload2["messages"].append({
-                        "role": "assistant",
-                        "content": assistant_message
-                    })
-                except IndexError:
-                    pass
-            else:
-                pass
-    payload2["messages"].extend([
-    {"role": "user", "content": 'PROMPT ID: '+str(count)+'\n'+current},
-    {"role": "assistant", "content": 'RESPONSE ID: '+str(count) + ' - ' + move_response}
-    ])
-    img_url = 'http://159.89.174.187:8080/public_images/output1.jpg'
-    payload2["messages"].append(
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image_url", "image_url": {"url": img_url}
-                }
-            ]
-        }
-    )
-  
-    payload2["messages"].extend([
-        {"role": "user", "content": 'I must decide which, if any, of my session history responses are incorrect and not already marked with (INCORRECT RESPONSE). If all responses that arent already marked with (INCORRECT RESPONSE) are correct, then I will just say the word CORRECT. If any responses that arent already marked with (INCORRECT RESPONSE) are incorrect, then I must say the ID followed by ~~ followed by why the response was wrong.'},
-    ])
-    with open('payload2.txt', 'w+') as f:
-        f.write(json.dumps(payload2, indent=4).replace("\\n","\n"))
-    command_now_1 = requests.post("https://api.openai.com/v1/chat/completions", headers=headers2, json=payload2)
-    print("\nMENTAL TOKENS: "+str(command_now_1.json()['usage']['prompt_tokens']))
-    full_command = command_now_1.json().get("choices", [{}])[0].get("message", {}).get("content", "").replace('"','').replace('*','').replace('**','').replace('<','').replace('>','')
-    print("\nMENTAL: "+full_command)
-
-    timestamp_formatted = time_now.replace('/', '-').replace(':', '-').replace(' ', 'T')
-    sanitized_description = []
-    for kw in de:
-        kw = kw.strip()
-        sanitized = kw.replace(' ', '_')
-        sanitized = re.sub(r'[^\w\-]', '', sanitized)
-        sanitized_description.append(sanitized)
-    sub1 = su[0]
-    sub2 = su[1]
-    sub3 = su[2]
-    description_part = '_'.join(sanitized_description)
-    filename_data = f'{timestamp_formatted}_{description_part}.txt'
-
-    with open('History_dataset_mental/'+filename_data, 'w+') as f:
-        f.write(json.dumps(payload2, indent=4).replace("\\n","\n") + '\nRESPONSE: ' + full_command)
-
-    with open('internal_input.txt', 'w+') as f:
-        f.write(full_command)
-    if full_command.strip().lower() != 'correct':
-        print('Managing rules because GPT said incorrect')
-        manage_rules2(full_command)
-    return
 
 def send_text_to_gpt4_summary():
     with open('current_convo.txt','w+') as f:
@@ -2920,8 +2610,7 @@ classes = [
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers().flatten()]
 move_stopper = False
-def handle_movement_command(
-    current_command,
+def handle_commands(
     distance,
     current,
     movement_command,
@@ -2974,332 +2663,327 @@ def handle_movement_command(
     now = datetime.now()
     the_time = now.strftime("%m/%d/%Y %H:%M:%S")
     sleep = False
-    try:
-        extra_data = movement_command.split('~~')[1]
-    except:
-        extra_data = ''
+    
     with open('last_move.txt', 'r') as f:
         last_mo = f.read()
-    print(movement_command)
-    print(current_command)
-    print('handled')
-    just_spoke = False
-    while True:
+    # Assigning the keys in the main dictionary as variables
+    physical_output_command = movement_command["physical_output_command"].lower().replace(' ','')
+    speech_command = movement_command["speech_command"]
+    mode_command = movement_command["mode_command"]
+
+    # Loop through the mental_commands dictionary and create variables
+    for key, value in movement_command["mental_commands"].items():
+        globals()[key.replace(" ", "_")] = value  # Create a variable with a sanitized name (spaces replaced with underscores)
+
+    # Example: printing the created variables
+    print(physical_output_command)
+    print(speech_command)
+    print(mode_command)
+    print(Change_Name_Of_Person)
+    print(Change_Current_Task)
+    print(Save_Image_Of_Person)
+    print(Remember_Information)
+    if speech_command != 'false':
         try:
-            try:
-                current_command = movement_command.split('~~')[0].strip().lower().replace(' ','').replace('.','')
-            except:
-                current_command = movement_command.strip().lower().replace(' ','').replace('.','')
-            split_cmd = movement_command.split('~~')
-          
-          
-            if yolo_nav == True or yolo_find == True or yolo_look == True or follow_user == True:
-                in_mode = True
+            speech_com = speech_command.split('~~')[0].lower().replace(' ','').strip()
+            speech_text = speech_command.split('~~')[1]
+        except:
+            speech_com = 'speak'
+            speech_text = speech_command
+    else:
+        speech_com = 'false'
+        speech_text = 'false'
+    if mode_command != 'false':
+        try:
+            mode_com = mode_command.split('~~')[0].lower().replace(' ','').strip()
+            mode_text = mode_command.split('~~')[1].lower().strip()
+        except:
+            mode_com = mode_command.lower().replace(' ','').strip()
+            mode_text = 'none'
+    else:
+        mode_com = 'false'
+        mode_text = 'false'
+    # For Change_Name_Of_Person
+    if Change_Name_Of_Person != 'false':
+        try:
+            change_name_flag = 'true'
+            change_name_text = Change_Name_Of_Person.split('~~')[1].lower().strip()
+        except:
+            change_name_flag = 'true'
+            change_name_text = Change_Name_Of_Person
+    else:
+        change_name_flag = 'false'
+        change_name_text = 'false'
+
+    # For Change_Current_Task
+    if Change_Current_Task != 'false':
+        try:
+            change_task_flag = 'true'
+            change_task_text = Change_Current_Task.split('~~')[1].lower().strip()
+        except:
+            change_task_flag = 'true'
+            change_task_text = Change_Current_Task
+    else:
+        change_task_flag = 'false'
+        change_task_text = 'false'
+
+    # For Save_Image_Of_Person
+    if Save_Image_Of_Person != 'false':
+        try:
+            save_image_flag = 'true'
+            save_image_text = Save_Image_Of_Person.split('~~')[1].lower().strip()
+        except:
+            save_image_flag = 'true'
+            save_image_text = Save_Image_Of_Person
+    else:
+        save_image_flag = 'false'
+        save_image_text = 'false'
+
+    # For Remember_Information
+    if Remember_Information != 'false':
+        try:
+            remember_info_flag = 'true'
+            remember_info_text = Remember_Information.split('~~')[1].lower().strip()
+        except:
+            remember_info_flag = 'true'
+            remember_info_text = Remember_Information
+    else:
+        remember_info_flag = 'false'
+        remember_info_text = 'false'
+    just_spoke = False
+    try:
+    
+      
+      
+        if yolo_nav == True or yolo_find == True or yolo_look == True or follow_user == True:
+            in_mode = True
+        else:
+            pass
+        if physical_output_command in ['moveforward1inch', 'moveforwardoneinch']:
+            if distance < 15.0:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = movement_command
+                move_failure_reason = 'Not enough room in front of me to move forward.'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            elif current >= -150.0:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = movement_command
+                move_failure_reason = 'I am on the charger and cannot move my wheels.'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
             else:
-                pass
-            if current_command in ['moveforward1inch', 'moveforwardoneinch']:
-                if distance < 15.0:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'Not enough room in front of me to move forward.'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                elif current >= -150.0:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'I am on the charger and cannot move my wheels.'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                else:
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(current_command)
-                    send_data_to_arduino(["w"], arduino_address)
+                with open('last_move.txt', 'w+') as f:
+                    f.write(physical_output_command)
+                send_data_to_arduino(["w"], arduino_address)
+                #if in_mode == False:
+                time.sleep(0.1)
+                send_data_to_arduino(["x"], arduino_address)
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+        elif physical_output_command in ['moveforward1foot', 'moveforwardonefoot']:
+            if distance < 40.0:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = movement_command
+                move_failure_reason = 'Not enough room in front of me to move forward.'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            elif current >= -150.0:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = movement_command
+                move_failure_reason = 'I am on the charger and cannot move my wheels.'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            else:
+                with open('last_move.txt', 'w+') as f:
+                    f.write(physical_output_command)
+                send_data_to_arduino(["w"], arduino_address)
+                #if in_mode == False:
+                time.sleep(0.5)
+                send_data_to_arduino(["x"], arduino_address)
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+        elif physical_output_command == 'movebackward':
+            if current >= -150.0:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = movement_command
+                move_failure_reason = 'I am on the charger and cannot move my wheels.'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            else:
+                with open('last_move.txt', 'w+') as f:
+                    f.write(physical_output_command)
+                send_data_to_arduino(["s"], arduino_address)
+                time.sleep(0.5)
+                send_data_to_arduino(["x"], arduino_address)
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+        elif physical_output_command in ['turnleft45degrees', 'turnleft15degrees', 'turnright45degrees', 'turnright15degrees', 'turnaround180degrees']:
+            if current >= -150.0:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = movement_command
+                move_failure_reason = 'I am on the charger and cannot move my wheels.'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            else:
+                if physical_output_command == 'turnleft45degrees':
+                    send_data_to_arduino(["a"], arduino_address)
                     #if in_mode == False:
-                    time.sleep(0.1)
+                    time.sleep(0.15)
                     send_data_to_arduino(["x"], arduino_address)
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-            elif current_command in ['moveforward1foot', 'moveforwardonefoot']:
-                if distance < 40.0:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'Not enough room in front of me to move forward.'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                elif current >= -150.0:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'I am on the charger and cannot move my wheels.'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                else:
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(current_command)
-                    send_data_to_arduino(["w"], arduino_address)
+                elif physical_output_command == 'turnleft15degrees':
+                    send_data_to_arduino(["a"], arduino_address)
                     #if in_mode == False:
-                    time.sleep(0.5)
+                    time.sleep(0.03)
                     send_data_to_arduino(["x"], arduino_address)
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-            elif current_command == 'movebackward':
-                if current >= -150.0:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'I am on the charger and cannot move my wheels.'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                else:
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(current_command)
-                    send_data_to_arduino(["s"], arduino_address)
-                    time.sleep(0.5)
+                elif physical_output_command == 'turnright45degrees':
+                    send_data_to_arduino(["d"], arduino_address)
+                    #if in_mode == False:
+                    time.sleep(0.15)
                     send_data_to_arduino(["x"], arduino_address)
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-            elif current_command in ['turnleft45degrees', 'turnleft15degrees', 'turnright45degrees', 'turnright15degrees', 'turnaround180degrees']:
-                if current >= -150.0:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'I am on the charger and cannot move my wheels.'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                else:
-                    if current_command == 'turnleft45degrees':
-                        send_data_to_arduino(["a"], arduino_address)
-                        #if in_mode == False:
-                        time.sleep(0.15)
-                        send_data_to_arduino(["x"], arduino_address)
-                    elif current_command == 'turnleft15degrees':
-                        send_data_to_arduino(["a"], arduino_address)
-                        #if in_mode == False:
-                        time.sleep(0.03)
-                        send_data_to_arduino(["x"], arduino_address)
-                    elif current_command == 'turnright45degrees':
-                        send_data_to_arduino(["d"], arduino_address)
-                        #if in_mode == False:
-                        time.sleep(0.15)
-                        send_data_to_arduino(["x"], arduino_address)
-                    elif current_command == 'turnright15degrees':
-                        send_data_to_arduino(["d"], arduino_address)
-                        #if in_mode == False:
-                        time.sleep(0.03)
-                        send_data_to_arduino(["x"], arduino_address)
-                    elif current_command == 'turnaround180degrees':
-                        send_data_to_arduino(["d"], arduino_address)
-                        #if in_mode == False:
-                        time.sleep(1)
-                        send_data_to_arduino(["x"], arduino_address)
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(current_command)
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-            elif current_command in ['raisecameraangle', 'lowercameraangle']:
-                if current_command == 'raisecameraangle':
-                    if camera_vertical_pos == 'up':
-                      
-                    
-                        move_failed_command = movement_command
-                        move_failure_reason = 'Camera angle is already raised as much as possible.'
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                    else:
-                        with open('last_move.txt', 'w+') as f:
-                            f.write(current_command)
-                        send_data_to_arduino(["2"], arduino_address)
-                        time.sleep(1.5)
-                        move_failed_command = ''
-                        move_failure_reason = ''
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-                        if camera_vertical_pos == 'down':
-                            camera_vertical_pos = 'forward'
-                        else:
-                            camera_vertical_pos = 'up'
-                elif current_command == 'lowercameraangle':
-                    if camera_vertical_pos == 'down':
-                    
-                        move_failed_command = movement_command
-                        move_failure_reason = 'Camera angle is already lowered as much as possible.'
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                    else:
-                        with open('last_move.txt', 'w+') as f:
-                            f.write(current_command)
-                        send_data_to_arduino(["1"], arduino_address)
-                        time.sleep(1.5)
-                        move_failed_command = ''
-                        move_failure_reason = ''
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                        if camera_vertical_pos == 'up':
-                            camera_vertical_pos = 'forward'
-                        else:
-                            camera_vertical_pos = 'down'
-            elif current_command == 'doasetofmultiplemovements':
-                try:
-                    move_set = movement_command.split('~~')[1].strip().replace(' ','').lower().split(',')
-                    invalid_moves = [move for move in move_set if move not in ALLOWED_MOVES]
-                    if invalid_moves:
-                        yolo_nav = False
-                        yolo_find = False
-                        yolo_look = False
-                        follow_user = False
-                        look_object = ''
-                        nav_object = ''
-                        move_set = []
-                        move_failed_command = movement_command
-                        move_failure_reason = (f"The following moves are invalid: {', '.join(invalid_moves)}. Only {allowed_str} are allowed.")
-                        print(move_failure_reason)
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                    else:
-                        with open('last_move.txt', 'w+') as f:
-                            f.write(current_command)
-                        print(move_set)
-                        move_failed_command = ''
-                        move_failure_reason = ''
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                except Exception as e:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = str(e)
-                    print(traceback.format_exc())
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-            elif current_command == 'donothing':
-                if phrase == '*No Mic Input*' or just_spoke == True:
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(current_command)
-                else:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'The person said "'+phrase+'" but for some reason I did nothing. Maybe I should respond to the previous Mic Input in the appropriate way?'
-                    move_failure_reason_rule = 'The person said "'+phrase+'" but for some reason I did nothing. Maybe I should pick a good command choice for my next response whenever I forget to respond on the first response where I saw their Mic Input?'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    manage_rules(move_failure_reason_rule, hist_file1, hist_file2, hist_file3, file_name)
-
-            elif current_command in ['speakanddoaction']:
-                with open('playback_text.txt', 'r') as f:
-                    p_text = f.read().strip()
+                elif physical_output_command == 'turnright15degrees':
+                    send_data_to_arduino(["d"], arduino_address)
+                    #if in_mode == False:
+                    time.sleep(0.03)
+                    send_data_to_arduino(["x"], arduino_address)
+                elif physical_output_command == 'turnaround180degrees':
+                    send_data_to_arduino(["d"], arduino_address)
+                    #if in_mode == False:
+                    time.sleep(1)
+                    send_data_to_arduino(["x"], arduino_address)
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open('last_move.txt', 'w+') as f:
+                    f.write(physical_output_command)
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+        elif physical_output_command in ['raisecameraangle', 'lowercameraangle']:
+            if physical_output_command == 'raisecameraangle':
+                if camera_vertical_pos == 'up':
+                  
                 
-                unsaid = check_phrase_in_file(movement_command.split('~~')[1])
-                if '~~' not in movement_command:
+                    move_failed_command = movement_command
+                    move_failure_reason = 'Camera angle is already raised as much as possible.'
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                else:
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(physical_output_command)
+                    send_data_to_arduino(["2"], arduino_address)
+                    time.sleep(1.5)
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    if camera_vertical_pos == 'down':
+                        camera_vertical_pos = 'forward'
+                    else:
+                        camera_vertical_pos = 'up'
+            elif physical_output_command == 'lowercameraangle':
+                if camera_vertical_pos == 'down':
+                
+                    move_failed_command = movement_command
+                    move_failure_reason = 'Camera angle is already lowered as much as possible.'
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                else:
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(physical_output_command)
+                    send_data_to_arduino(["1"], arduino_address)
+                    time.sleep(1.5)
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+                    if camera_vertical_pos == 'up':
+                        camera_vertical_pos = 'forward'
+                    else:
+                        camera_vertical_pos = 'down'
+        elif physical_output_command == 'doasetofmultiplemovements':
+            try:
+                move_set = movement_command.split('~~')[1].strip().replace(' ','').lower().split(',')
+                invalid_moves = [move for move in move_set if move not in ALLOWED_MOVES]
+                if invalid_moves:
                     yolo_nav = False
                     yolo_find = False
                     yolo_look = False
@@ -3308,18 +2992,105 @@ def handle_movement_command(
                     nav_object = ''
                     move_set = []
                     move_failed_command = movement_command
-                    move_failure_reason = 'Speech command was given but no text to speak was provided with the command.'
+                    move_failure_reason = (f"The following moves are invalid: {', '.join(invalid_moves)}. Only {allowed_str} are allowed.")
                     with open("move_failed.txt","w+") as f:
                         f.write(move_failed_command)
                     with open("move_failure_reas.txt","w+") as f:
                         f.write(move_failure_reason)
 
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)                    
-                elif phrase != '*No Mic Input*':
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                else:
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(current_command)
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+            except Exception as e:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = movement_command
+                move_failure_reason = str(e)
+                print(traceback.format_exc())
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+        else:
+            pass
+        if speech_com in ['speak']:
+            with open('playback_text.txt', 'r') as f:
+                p_text = f.read().strip()
+            
+            unsaid = check_phrase_in_file(speech_text)
+            if '~~' not in speech_command:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = speech_command
+                move_failure_reason = 'Speech command was given but no text to speak was provided with the command.'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)                    
+            elif phrase != '*No Mic Input*':
+                confirmer = 'speak'
+                if confirmer.lower().strip() == 'speak':
+                    with open('playback_text.txt','w') as f:
+                        f.write(speech_text)
+                    just_spoke = True
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+                    with open("last_speaker.txt","w+") as f:
+                        f.write('Echo')
+                    with open("last_said.txt","w+") as f:
+                        f.write(speech_text)
+
+                    add_new_phrase(speech_text)
+               
+                else:
+                    yolo_nav = False
+                    yolo_find = False
+                    yolo_look = False
+                    follow_user = False
+                    look_object = ''
+                    nav_object = ''
+                    move_set = []
+                    move_failed_command = speech_command
+                    move_failure_reason = 'Speech confirmer module said stay silent.'
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            elif last_mo in ['speak']:
+                if phrase != '*No Mic Input*':
                     confirmer = 'speak'
                     if confirmer.lower().strip() == 'speak':
                         with open('playback_text.txt','w') as f:
-                            f.write(movement_command.split('~~')[1])
+                            f.write(speech_text)
                         just_spoke = True
                         move_failed_command = ''
                         move_failure_reason = ''
@@ -3331,26 +3102,10 @@ def handle_movement_command(
                         with open("last_speaker.txt","w+") as f:
                             f.write('Echo')
                         with open("last_said.txt","w+") as f:
-                            f.write(movement_command.split('~~')[1])
+                            f.write(speech_text)
 
-                        add_new_phrase(movement_command.split('~~')[1])
-                        try:
-                            new_com = movement_command.split('~~')[2].strip()
-                            if new_com.lower().replace(' ','') == "donothing":                        
-                                movement_command = missed_command(movement_command)
-                                if movement_command.strip().lower() == 'no':
-                                    movement_command = 'Do Nothing'
-                                else:
-                                    pass
-                            else:
-                                try:
-                                    new_extra = movement_command.split('~~')[3].strip()
-                                    movement_command = new_com+' ~~ '+new_extra
-                                except:
-                                    movement_command = new_com
-                            continue
-                        except:
-                            pass
+                        add_new_phrase(speech_text)
+                     
                     else:
                         yolo_nav = False
                         yolo_find = False
@@ -3359,7 +3114,7 @@ def handle_movement_command(
                         look_object = ''
                         nav_object = ''
                         move_set = []
-                        move_failed_command = movement_command
+                        move_failed_command = speech_command
                         move_failure_reason = 'Speech confirmer module said stay silent.'
                         with open("move_failed.txt","w+") as f:
                             f.write(move_failed_command)
@@ -3367,217 +3122,7 @@ def handle_movement_command(
                             f.write(move_failure_reason)
 
                         manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                elif last_mo in ['speakanddoaction']:
-                    if phrase != '*No Mic Input*':
-                        confirmer = 'speak'
-                        if confirmer.lower().strip() == 'speak':
-                            with open('playback_text.txt','w') as f:
-                                f.write(movement_command.split('~~')[1])
-                            just_spoke = True
-                            move_failed_command = ''
-                            move_failure_reason = ''
-                            with open("move_failed.txt","w+") as f:
-                                f.write(move_failed_command)
-                            with open("move_failure_reas.txt","w+") as f:
-                                f.write(move_failure_reason)
-
-                            with open("last_speaker.txt","w+") as f:
-                                f.write('Echo')
-                            with open("last_said.txt","w+") as f:
-                                f.write(movement_command.split('~~')[1])
-
-                            add_new_phrase(movement_command.split('~~')[1])
-                            try:
-                                new_com = movement_command.split('~~')[2].strip()
-                                if new_com.lower().replace(' ','') == "donothing":                        
-                                    movement_command = missed_command(movement_command)
-                                    if movement_command.strip().lower() == 'no':
-                                        movement_command = 'Do Nothing'
-                                    else:
-                                        pass
-                                else:
-                                    try:
-                                        new_extra = movement_command.split('~~')[3].strip()
-                                        movement_command = new_com+' ~~ '+new_extra
-                                    except:
-                                        movement_command = new_com
-                                continue
-                            except:
-                                pass
-                        else:
-                            yolo_nav = False
-                            yolo_find = False
-                            yolo_look = False
-                            follow_user = False
-                            look_object = ''
-                            nav_object = ''
-                            move_set = []
-                            move_failed_command = movement_command
-                            move_failure_reason = 'Speech confirmer module said stay silent.'
-                            with open("move_failed.txt","w+") as f:
-                                f.write(move_failed_command)
-                            with open("move_failure_reas.txt","w+") as f:
-                                f.write(move_failure_reason)
-
-                            manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                    else:
-                        yolo_nav = False
-                        yolo_find = False
-                        yolo_look = False
-                        follow_user = False
-                        look_object = ''
-                        nav_object = ''
-                        move_set = []
-                        move_failed_command = movement_command
-                        move_failure_reason = 'I cannot repeatedly speak this fast.'
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                elif unsaid == True:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'I already said this a few seconds ago. No need to repeat myself!'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                elif p_text != '':
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'I am still physically saying the last Speak command!!!'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
                 else:
-                    if phrase == '*No Mic Input*':
-                        confirmer = 'speak'
-
-                        if confirmer.lower().strip() != 'speak':
-                            yolo_nav = False
-                            yolo_find = False
-                            yolo_look = False
-                            follow_user = False
-                            look_object = ''
-                            nav_object = ''
-                            move_set = []
-                            move_failed_command = movement_command
-                            move_failure_reason = 'I actually decided not to speak after thinking about it. I need to remember to only say stuff that is worthwhile.'
-                            with open("move_failed.txt","w+") as f:
-                                f.write(move_failed_command)
-                            with open("move_failure_reas.txt","w+") as f:
-                                f.write(move_failure_reason)
-
-                            manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                        else:
-                            with open('playback_text.txt','w') as f:
-                                f.write(movement_command.split('~~')[1])
-                            just_spoke = True
-                            move_failed_command = ''
-                            move_failure_reason = ''
-                            with open("move_failed.txt","w+") as f:
-                                f.write(move_failed_command)
-                            with open("move_failure_reas.txt","w+") as f:
-                                f.write(move_failure_reason)
-
-                            with open("last_speaker.txt","w+") as f:
-                                f.write('Echo')
-                            with open("last_said.txt","w+") as f:
-                                f.write(movement_command.split('~~')[1])
-                  
-                            add_new_phrase(movement_command.split('~~')[1])
-                            try:
-                                new_com = movement_command.split('~~')[2].strip()
-                                if new_com.lower().replace(' ','') == "donothing":                        
-                                    movement_command = missed_command(movement_command)
-                                    if movement_command.strip().lower() == 'no':
-                                        movement_command = 'Do Nothing'
-                                    else:
-                                        pass
-                                else:
-                                    try:
-                                        new_extra = movement_command.split('~~')[3].strip()
-                                        movement_command = new_com+' ~~ '+new_extra
-                                    except:
-                                        movement_command = new_com
-                                continue
-                            except:
-                                pass
-                    else:
-                        confirmer = 'speak'
-                        if confirmer.lower().strip() == 'speak':
-                            with open('playback_text.txt','w') as f:
-                                f.write(movement_command.split('~~')[1])
-                            just_spoke = True
-                            move_failed_command = ''
-                            move_failure_reason = ''
-                            with open("move_failed.txt","w+") as f:
-                                f.write(move_failed_command)
-                            with open("move_failure_reas.txt","w+") as f:
-                                f.write(move_failure_reason)
-
-                            with open("last_speaker.txt","w+") as f:
-                                f.write('Echo')
-                            with open("last_said.txt","w+") as f:
-                                f.write(movement_command.split('~~')[1])
-
-                            add_new_phrase(movement_command.split('~~')[1])
-                            try:
-                                new_com = movement_command.split('~~')[2].strip()
-                                if new_com.lower().replace(' ','') == "donothing":                        
-                                    movement_command = missed_command(movement_command)
-                                    if movement_command.strip().lower() == 'no':
-                                        movement_command = 'Do Nothing'
-                                    else:
-                                        pass
-                                else:
-                                    try:
-                                        new_extra = movement_command.split('~~')[3].strip()
-                                        movement_command = new_com+' ~~ '+new_extra
-                                    except:
-                                        movement_command = new_com
-                                continue
-                            except:
-                                pass
-                        else:
-                            yolo_nav = False
-                            yolo_find = False
-                            yolo_look = False
-                            follow_user = False
-                            look_object = ''
-                            nav_object = ''
-                            move_set = []
-                            move_failed_command = movement_command
-                            move_failure_reason = 'Speech confirmer module said stay silent.'
-                            with open("move_failed.txt","w+") as f:
-                                f.write(move_failed_command)
-                            with open("move_failure_reas.txt","w+") as f:
-                                f.write(move_failure_reason)
-
-                            manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-            elif current_command == 'navigatetospecificyoloobject':
-                print('navigate to object')
-                nav_object = movement_command.split('~~')[1].strip().lower()
-                if current >= -150.0:
                     yolo_nav = False
                     yolo_find = False
                     yolo_look = False
@@ -3585,485 +3130,15 @@ def handle_movement_command(
                     look_object = ''
                     nav_object = ''
                     move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'I am on the charger and cannot move my wheels.'
+                    move_failed_command = speech_command
+                    move_failure_reason = 'I cannot repeatedly speak this fast.'
                     with open("move_failed.txt","w+") as f:
                         f.write(move_failed_command)
                     with open("move_failure_reas.txt","w+") as f:
                         f.write(move_failure_reason)
 
                     manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                elif nav_object not in coco_names:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = f"{nav_object} is an invalid object name. You can only pick from this list: " + ', '.join(classes)
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                else:
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(current_command)
-                    yolo_nav = True
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-            elif current_command == 'centercameraonspecificyoloobject':
-                look_object = movement_command.split('~~')[1]
-                if current >= -150.0:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'I am on the charger and cannot move my wheels.'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                elif look_object not in coco_names:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = f"{look_object} is an invalid object name. You can only pick from this list: " + ', '.join(classes)
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                else:
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(current_command)
-                    send_data_to_arduino(["1"], arduino_address)
-                    time.sleep(0.1)
-                    send_data_to_arduino(["1"], arduino_address)
-                    time.sleep(0.1)
-                    send_data_to_arduino(["2"], arduino_address)
-                    time.sleep(0.1)
-                    send_data_to_arduino(["2"], arduino_address)
-                    time.sleep(0.1)
-                    camera_vertical_pos = 'forward'
-                    yolo_look = True
-                    yolo_nav = False
-                    yolo_find = False
-                    follow_user = False
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-            elif current_command == 'followperson':
-                print('follow person')
-                if current >= -150.0:
-                    print("Current")
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = 'I am on the charger and cannot move my wheels.'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                else:
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(current_command)
-                    print("Following")
-                    send_data_to_arduino(["1"], arduino_address)
-                    time.sleep(0.1)
-                    send_data_to_arduino(["1"], arduino_address)
-                    time.sleep(0.1)
-                    send_data_to_arduino(["2"], arduino_address)
-                    time.sleep(0.1)
-                    send_data_to_arduino(["2"], arduino_address)
-                    time.sleep(0.1)
-                    camera_vertical_pos = 'up'
-                    follow_user = True
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-            elif current_command == 'findunseenyoloobject':
-                print('find object')
-                nav_object = movement_command.split('~~')[1].strip().lower()
-                if current >= -150.0:
-
-                    move_failed_command = movement_command
-                    move_failure_reason = 'I am on the charger and cannot move my wheels.'
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    print(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                elif nav_object not in coco_names:
-                    move_failed_command = movement_command
-                    move_failure_reason = f"{nav_object} is an invalid object name. I can only pick from this list: " + ', '.join(classes)
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    print(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                else:
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(current_command)
-                    send_data_to_arduino(["1"], arduino_address)
-                    time.sleep(0.1)
-                    send_data_to_arduino(["1"], arduino_address)
-                    time.sleep(0.1)
-                    send_data_to_arduino(["2"], arduino_address)
-                    time.sleep(0.1)
-                    send_data_to_arduino(["2"], arduino_address)
-                    time.sleep(0.1)
-                    camera_vertical_pos = 'forward'
-                    yolo_find = True
-                    yolo_nav = False
-                    yolo_look = False
-                    follow_user = False
-                    print('finding ' + nav_object)
-                    scan360 = 0
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-            elif current_command == 'gotosleep':
-                files = [
-                    os.path.join('Convo', f)
-                    for f in os.listdir('Convo')
-                    if os.path.isfile(os.path.join('Convo', f))
-                ]
-                with open("last_phrase.txt","r") as f:
-                    last1now = f.read()
-                recent_chat, next_files_in = get_recent_chat()
-                chat_amount = len(recent_chat)
-                if chat_amount > 0 or phrase != '*No Mic Input*':
-                    sleep_confirm = 'yes'
-                    if sleep_confirm == 'yes':
-                        move_failed_command = ''
-                        move_failure_reason = ''
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-                        with open('last_move.txt', 'w+') as f:
-                            f.write(current_command)
-                        yolo_nav = False
-                        yolo_find = False
-                        yolo_look = False
-                        follow_user = False
-                        sleep = True
-                        with open('error_rate.txt','w+') as f:
-                            f.write('0')
-                        with open('sleep.txt', 'w+') as f:
-                            f.write(str(sleep))
-                        move_set = []
-                        with open('current_convo.txt','w+') as f:
-                            f.write('')
-                        send_text_to_gpt4_summary() 
-
-                        print("\nEntering Sleep Mode Until Name Is Heard")
-                    else:
-                        yolo_nav = False
-                        yolo_find = False
-                        yolo_look = False
-                        follow_user = False
-                        look_object = ''
-                        nav_object = ''
-                        move_set = []
-                        move_failed_command = movement_command
-                        move_failure_reason = f"I should only go into Sleep Mode if it is the proper time."
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                elif last1now != '*No Mic Input*':
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = f"If the user is saying something, it is not the proper time for Sleep Mode."
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                else:
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(current_command)
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    sleep = True
-                    with open('sleep.txt', 'w+') as f:
-                        f.write(str(sleep))
-                    move_set = []
-                    with open('current_convo.txt','w+') as f:
-                        f.write('')
-                    send_text_to_gpt4_summary()
-                    with open('error_rate.txt','w+') as f:
-                        f.write('0')
-                    print("\nEntering Sleep Mode Until Name Is Heard")
-            elif current_command == 'setnameofperson':
-                try:
-                    with open('name_of_person.txt', 'r') as f:
-                        nop = f.read().lower().strip()
-                    n_of_person = movement_command.split('~~')[1].lower().strip()
-                    if nop != n_of_person:
-                        move_failed_command = ''
-                        move_failure_reason = ''
-                        with open('last_move.txt', 'w+') as f:
-                            f.write(current_command)
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                        with open('name_of_person.txt', 'w+') as f:
-                            f.write(n_of_person)
-                    else:
-                        yolo_nav = False
-                        yolo_find = False
-                        yolo_look = False
-                        follow_user = False
-                        look_object = ''
-                        nav_object = ''
-                        move_set = []
-                        move_failed_command = movement_command
-                        move_failure_reason = "I cannot set the name of the person to the same thing that it already is."
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                except:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = str(traceback.format_exc())
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    print(traceback.format_exc())
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-            elif current_command == 'setcurrenttask':
-                try:
-                    with open('current_task.txt', 'r') as f:
-                        task = f.read().lower().strip()
-                    new_task = movement_command.split('~~')[1].lower().strip()
-                    if task != new_task:
-                        move_failed_command = ''
-                        move_failure_reason = ''
-                        with open('last_move.txt', 'w+') as f:
-                            f.write(current_command)
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                        with open('current_task.txt', 'w+') as f:
-                            f.write(new_task)
-                    else:
-                        yolo_nav = False
-                        yolo_find = False
-                        yolo_look = False
-                        follow_user = False
-                        look_object = ''
-                        nav_object = ''
-                        move_set = []
-                        move_failed_command = movement_command
-                        move_failure_reason = "I cannot set the name of the task to the same thing that it already is."
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                except:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = str(traceback.format_exc())
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    print(traceback.format_exc())
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-            elif current_command == 'saveimageofperson':
-                try:
-                    # Get current person name
-                    with open('name_of_person.txt', 'r') as f:
-                        nop = f.read()
-                    # If no current name, fail it
-                    if nop != 'Unknown Name Of Person':
-                        move_failed_command = ''
-                        move_failure_reason = ''
-                        with open('last_move.txt', 'w+') as f:
-                            f.write(current_command)
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                        # Copy and rename output1.jpg
-                        people_dir = 'People_images'
-                        os.makedirs(people_dir, exist_ok=True)
-
-                        # Define the destination path using the person's name
-                        destination_path = os.path.join(people_dir, f"{nop}.jpg")
-
-                        # Copy and rename output1.jpg to the People folder with the person's name
-                        try:
-                            shutil.copy('output1.jpg', destination_path)
-                            print(f"Image saved as {destination_path}")
-                        except Exception as e:
-                            print(f"Error copying image: {e}")
-
-                        try:
-                            uploader.send_person_image(destination_path, nop)
-                            # Save to list of known people if not already present
-                            try:
-                                known_people = []
-                                if os.path.exists('known_people.txt'):
-                                    with open('known_people.txt', 'r') as f:
-                                        content = f.read().strip()
-                                    if content:
-                                        known_people = [name.strip() for name in content.split(',')]
-
-                                # Only append if the name is not already in the list
-                                if nop not in known_people:
-                                    separator = ', ' if known_people else ''
-                                    with open('known_people.txt', 'a') as f:
-                                        f.write(f"{separator}{nop}")
-                            except Exception as e:
-                                print(f"Error updating known_people.txt: {e}")
-                        except:
-                            print(traceback.format_exc())
-                    else:
-                        yolo_nav = False
-                        yolo_find = False
-                        yolo_look = False
-                        follow_user = False
-                        look_object = ''
-                        nav_object = ''
-                        move_set = []
-                        move_failed_command = movement_command
-                        move_failure_reason = "I must set the name of the person first! If I do not know the name yet, I should ask."
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-
-                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4,
-                                     hist_file5, hist_file6, hist_file7, hist_file8, hist_file9,
-                                     hist_file10, file_name)
-                except:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = movement_command
-                    move_failure_reason = str(traceback.format_exc())
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-
-                    print(traceback.format_exc())
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4,
-                                 hist_file5, hist_file6, hist_file7, hist_file8, hist_file9,
-                                 hist_file10, file_name)
-            else:
+            elif unsaid == True:
                 yolo_nav = False
                 yolo_find = False
                 yolo_look = False
@@ -4071,42 +3146,686 @@ def handle_movement_command(
                 look_object = ''
                 nav_object = ''
                 move_set = []
-                movement_command_fixed = bad_command(movement_command)
-                move_failed_command = movement_command
-                move_failure_reason = 'I did not pick a valid Command Choice. A better response would have been ' + movement_command_fixed
+                move_failed_command = speech_command
+                move_failure_reason = 'I already said this a few seconds ago. No need to repeat myself!'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            elif p_text != '':
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = speech_command
+                move_failure_reason = 'I am still physically saying the last Speak command!!!'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            else:
+                if phrase == '*No Mic Input*':
+                    confirmer = 'speak'
+
+                    if confirmer.lower().strip() != 'speak':
+                        yolo_nav = False
+                        yolo_find = False
+                        yolo_look = False
+                        follow_user = False
+                        look_object = ''
+                        nav_object = ''
+                        move_set = []
+                        move_failed_command = speech_command
+                        move_failure_reason = 'I actually decided not to speak after thinking about it. I need to remember to only say stuff that is worthwhile.'
+                        with open("move_failed.txt","w+") as f:
+                            f.write(move_failed_command)
+                        with open("move_failure_reas.txt","w+") as f:
+                            f.write(move_failure_reason)
+
+                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                    else:
+                        with open('playback_text.txt','w') as f:
+                            f.write(speech_text)
+                        just_spoke = True
+                        move_failed_command = ''
+                        move_failure_reason = ''
+                        with open("move_failed.txt","w+") as f:
+                            f.write(move_failed_command)
+                        with open("move_failure_reas.txt","w+") as f:
+                            f.write(move_failure_reason)
+
+                        with open("last_speaker.txt","w+") as f:
+                            f.write('Echo')
+                        with open("last_said.txt","w+") as f:
+                            f.write(speech_text)
+              
+                        add_new_phrase(speech_text)
+                       
+                else:
+                    confirmer = 'speak'
+                    if confirmer.lower().strip() == 'speak':
+                        with open('playback_text.txt','w') as f:
+                            f.write(speech_text)
+                        just_spoke = True
+                        move_failed_command = ''
+                        move_failure_reason = ''
+                        with open("move_failed.txt","w+") as f:
+                            f.write(move_failed_command)
+                        with open("move_failure_reas.txt","w+") as f:
+                            f.write(move_failure_reason)
+
+                        with open("last_speaker.txt","w+") as f:
+                            f.write('Echo')
+                        with open("last_said.txt","w+") as f:
+                            f.write(speech_text)
+
+                        add_new_phrase(speech_text)
+                       
+                    else:
+                        yolo_nav = False
+                        yolo_find = False
+                        yolo_look = False
+                        follow_user = False
+                        look_object = ''
+                        nav_object = ''
+                        move_set = []
+                        move_failed_command = speech_command
+                        move_failure_reason = 'Speech confirmer module said stay silent.'
+                        with open("move_failed.txt","w+") as f:
+                            f.write(move_failed_command)
+                        with open("move_failure_reas.txt","w+") as f:
+                            f.write(move_failure_reason)
+
+                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+        else:
+            pass
+        if mode_com == 'navigatetospecificyoloobject':
+            nav_object = mode_text
+            if current >= -150.0:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = mode_command
+                move_failure_reason = 'I am on the charger and cannot move my wheels.'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            elif nav_object not in coco_names:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = mode_command
+                move_failure_reason = f"{nav_object} is an invalid object name. You can only pick from this list: " + ', '.join(classes)
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            else:
+                with open('last_move.txt', 'w+') as f:
+                    f.write(mode_command)
+                yolo_nav = True
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+        elif mode_com == 'centercameraonspecificyoloobject':
+            look_object = mode_text
+            if current >= -150.0:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = mode_command
+                move_failure_reason = 'I am on the charger and cannot move my wheels.'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            elif look_object not in coco_names:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = mode_command
+                move_failure_reason = f"{look_object} is an invalid object name. You can only pick from this list: " + ', '.join(classes)
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            else:
+                with open('last_move.txt', 'w+') as f:
+                    f.write(mode_command)
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["2"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["2"], arduino_address)
+                time.sleep(0.1)
+                camera_vertical_pos = 'forward'
+                yolo_look = True
+                yolo_nav = False
+                yolo_find = False
+                follow_user = False
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+        elif mode_com == 'followperson':
+            if current >= -150.0:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = mode_command
+                move_failure_reason = 'I am on the charger and cannot move my wheels.'
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            else:
+                with open('last_move.txt', 'w+') as f:
+                    f.write(mode_command)
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["2"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["2"], arduino_address)
+                time.sleep(0.1)
+                camera_vertical_pos = 'up'
+                follow_user = True
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+        elif mode_com == 'findunseenyoloobject':
+            nav_object = mode_text
+            if current >= -150.0:
+
+                move_failed_command = mode_command
+                move_failure_reason = 'I am on the charger and cannot move my wheels.'
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
                 with open("move_failed.txt","w+") as f:
                     f.write(move_failed_command)
                 with open("move_failure_reas.txt","w+") as f:
                     f.write(move_failure_reason)
                 manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-                
-            if move_failed_command == '':
-                manage_error_rate(False)
-            else:
-                manage_error_rate(True)
-            break
-        except:
-            yolo_nav = False
-            yolo_find = False
-            yolo_look = False
-            follow_user = False
-            look_object = ''
-            nav_object = ''
-            move_set = []
-            movement_command_fixed = bad_command(movement_command)
-            move_failed_command = movement_command
-            move_failure_reason = 'I did not pick a valid Command Choice. A better response would have been ' + movement_command_fixed
-            with open("move_failed.txt","w+") as f:
-                f.write(move_failed_command)
-            with open("move_failure_reas.txt","w+") as f:
-                f.write(move_failure_reason)
+            elif nav_object not in coco_names:
+                move_failed_command = mode_command
+                move_failure_reason = f"{nav_object} is an invalid object name. I can only pick from this list: " + ', '.join(classes)
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
 
-            manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-            if move_failed_command == '':
-                manage_error_rate(False)
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
             else:
-                manage_error_rate(True)
-            break
+                with open('last_move.txt', 'w+') as f:
+                    f.write(mode_command)
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["1"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["2"], arduino_address)
+                time.sleep(0.1)
+                send_data_to_arduino(["2"], arduino_address)
+                time.sleep(0.1)
+                camera_vertical_pos = 'forward'
+                yolo_find = True
+                yolo_nav = False
+                yolo_look = False
+                follow_user = False
+                scan360 = 0
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+        elif mode_com == 'gotosleep':
+            files = [
+                os.path.join('Convo', f)
+                for f in os.listdir('Convo')
+                if os.path.isfile(os.path.join('Convo', f))
+            ]
+            with open("last_phrase.txt","r") as f:
+                last1now = f.read()
+            recent_chat, next_files_in = get_recent_chat()
+            chat_amount = len(recent_chat)
+            if chat_amount > 0 or phrase != '*No Mic Input*':
+                sleep_confirm = 'yes'
+                if sleep_confirm == 'yes':
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(mode_command)
+                    yolo_nav = False
+                    yolo_find = False
+                    yolo_look = False
+                    follow_user = False
+                    sleep = True
+                    with open('error_rate.txt','w+') as f:
+                        f.write('0')
+                    with open('sleep.txt', 'w+') as f:
+                        f.write(str(sleep))
+                    move_set = []
+                    with open('current_convo.txt','w+') as f:
+                        f.write('')
+                    send_text_to_gpt4_summary() 
+
+                    print("\nEntering Sleep Mode Until Name Is Heard")
+                else:
+                    yolo_nav = False
+                    yolo_find = False
+                    yolo_look = False
+                    follow_user = False
+                    look_object = ''
+                    nav_object = ''
+                    move_set = []
+                    move_failed_command = mode_command
+                    move_failure_reason = f"I should only go into Sleep Mode if it is the proper time."
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            elif last1now != '*No Mic Input*':
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = mode_command
+                move_failure_reason = f"If the user is saying something, it is not the proper time for Sleep Mode."
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            else:
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                with open('last_move.txt', 'w+') as f:
+                    f.write(mode_command)
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                sleep = True
+                with open('sleep.txt', 'w+') as f:
+                    f.write(str(sleep))
+                move_set = []
+                with open('current_convo.txt','w+') as f:
+                    f.write('')
+                send_text_to_gpt4_summary()
+                with open('error_rate.txt','w+') as f:
+                    f.write('0')
+                print("\nEntering Sleep Mode Until Name Is Heard")
+        else:
+            pass
+   
+        if change_name_flag == 'true':
+            try:
+                with open('name_of_person.txt', 'r') as f:
+                    nop = f.read().lower().strip()
+                n_of_person = change_name_text
+                if nop != n_of_person:
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(current_command)
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+                    with open('name_of_person.txt', 'w+') as f:
+                        f.write(n_of_person)
+                else:
+                    yolo_nav = False
+                    yolo_find = False
+                    yolo_look = False
+                    follow_user = False
+                    look_object = ''
+                    nav_object = ''
+                    move_set = []
+                    move_failed_command = Change_Name_Of_Person
+                    move_failure_reason = "I cannot set the name of the person to the same thing that it already is."
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            except:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = Change_Name_Of_Person
+                move_failure_reason = str(traceback.format_exc())
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+        else:
+            pass
+        if change_task_flag == 'true':
+            try:
+                with open('current_task.txt', 'r') as f:
+                    task = f.read().lower().strip()
+                new_task = change_task_text
+                if task != new_task:
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(Change_Current_Task)
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+                    with open('current_task.txt', 'w+') as f:
+                        f.write(new_task)
+                else:
+                    yolo_nav = False
+                    yolo_find = False
+                    yolo_look = False
+                    follow_user = False
+                    look_object = ''
+                    nav_object = ''
+                    move_set = []
+                    move_failed_command = Change_Current_Task
+                    move_failure_reason = "I cannot set the name of the task to the same thing that it already is."
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            except:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = Change_Current_Task
+                move_failure_reason = str(traceback.format_exc())
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+        else:
+            pass
+        if save_image_flag == 'true':
+            try:
+                # Get current person name
+                with open('name_of_person.txt', 'r') as f:
+                    nop = f.read().lower()
+                # If no current name, fail it
+                if nop != 'unknown name of person':
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(Save_Image_Of_Person)
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+                    # Copy and rename output1.jpg
+                    people_dir = 'People_images'
+                    os.makedirs(people_dir, exist_ok=True)
+
+                    # Define the destination path using the person's name
+                    destination_path = os.path.join(people_dir, f"{nop}.jpg")
+
+                    # Copy and rename output1.jpg to the People folder with the person's name
+                    try:
+                        shutil.copy('output1.jpg', destination_path)
+                        print(f"Image saved as {destination_path}")
+                    except Exception as e:
+                        print(f"Error copying image: {e}")
+
+                    try:
+                        uploader.send_person_image(destination_path, nop)
+                        # Save to list of known people if not already present
+                        try:
+                            known_people = []
+                            if os.path.exists('known_people.txt'):
+                                with open('known_people.txt', 'r') as f:
+                                    content = f.read().lower().strip()
+                                if content:
+                                    known_people = [name.strip() for name in content.split(',')]
+
+                            # Only append if the name is not already in the list
+                            if nop not in known_people:
+                                separator = ', ' if known_people else ''
+                                with open('known_people.txt', 'a') as f:
+                                    f.write(f"{separator}{nop}")
+                        except Exception as e:
+                            print(f"Error updating known_people.txt: {e}")
+                    except:
+                        print(traceback.format_exc())
+                else:
+                    yolo_nav = False
+                    yolo_find = False
+                    yolo_look = False
+                    follow_user = False
+                    look_object = ''
+                    nav_object = ''
+                    move_set = []
+                    move_failed_command = Save_Image_Of_Person
+                    move_failure_reason = "I must set the name of the person first! If I do not know the name yet, I should ask."
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4,
+                                 hist_file5, hist_file6, hist_file7, hist_file8, hist_file9,
+                                 hist_file10, file_name)
+            except:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = Save_Image_Of_Person
+                move_failure_reason = str(traceback.format_exc())
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4,
+                             hist_file5, hist_file6, hist_file7, hist_file8, hist_file9,
+                             hist_file10, file_name)
+        else:
+            pass
+        """
+        if remember_info_flag == 'true':
+            try:
+            
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open('last_move.txt', 'w+') as f:
+                    f.write(Remember_Information)
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                
+                try:
+                    infos = []
+                    if os.path.exists('remembered_info.txt'):
+                        with open('remembered_info.txt', 'r') as f:
+                            infos = f.readlines()
+                        
+                    # Only append if the name is not already in the list
+                    info_piece = remember_info_text
+                    if info_piece not in infos:
+                        separator = '\n' if infos else ''
+                        with open('remembered_info.txt', 'a') as f:
+                            f.write(f"{separator}{info_piece}")
+                except Exception as e:
+                    print(f"Error updating remembered_info.txt: {e}")
+                try:
+                    with open('name_of_person.txt', 'r') as f:
+                        nop = f.read()
+                    infos = []
+                    if os.path.exists(nop + '_remembered_info.txt'):
+                        with open(nop + '_remembered_info.txt', 'r') as f:
+                            infos = f.readlines()
+
+                    # Only append if the name is not already in the list
+                    info_piece = remember_info_text
+                    if info_piece not in infos:
+                        separator = '\n' if infos else ''
+                        with open(nop + '_remembered_info.txt', 'a') as f:
+                            f.write(f"{separator}{info_piece}")
+                except Exception as e:
+                    print(f"Error updating remembered_info.txt: {e}")
+            except:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = Remember_Information
+                move_failure_reason = str(traceback.format_exc())
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+
+                print(traceback.format_exc())
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4,
+                             hist_file5, hist_file6, hist_file7, hist_file8, hist_file9,
+                             hist_file10, file_name)
+        
+        
+      
+        else:
+            pass
+        """
+        if move_failed_command == '':
+            manage_error_rate(False)
+        else:
+            manage_error_rate(True)
+          
+    except:
+        yolo_nav = False
+        yolo_find = False
+        yolo_look = False
+        follow_user = False
+        look_object = ''
+        nav_object = ''
+        move_set = []
+        move_failed_command = movement_command
+        move_failure_reason = 'I did not pick a valid Command Choice.'
+        with open("move_failed.txt","w+") as f:
+            f.write(move_failed_command)
+        with open("move_failure_reas.txt","w+") as f:
+            f.write(move_failure_reason)
+
+        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+        if move_failed_command == '':
+            manage_error_rate(False)
+        else:
+            manage_error_rate(True)
     return (move_failed_command,
             move_failure_reason,
             yolo_nav,
@@ -4236,8 +3955,6 @@ def movement_loop():
                         f.write(str(b_gpt_sleep))
                     b_start = False
                     g_speed = 0
-                    prompt_thread = threading.Thread(target=prompt_command, args=(last_phrase, ))
-                    prompt_thread.start()
                     yolo_nav = False
                     yolo_find = False
                     yolo_look = False
@@ -4246,22 +3963,12 @@ def movement_loop():
             else:
                 if last_phrase != '*No Mic Input*' and last_phrase != '':
                     g_speed = 0
-                    if b_gpt_sleep == False:
-                        prompt_thread = threading.Thread(target=prompt_command, args=(last_phrase, ))
-                        prompt_thread.start()
-                    else:
-                        pass
                     yolo_nav = False
                     yolo_find = False
                     yolo_look = False
                     follow_user = False
                     move_set = []
                 else:
-                    if b_gpt_sleep == False:
-                        thought_thread = threading.Thread(target=thought_command)
-                        thought_thread.start()
-                    else:
-                        pass
                     last_phrase = '*No Mic Input*'
             with open("last_phrase.txt","w+") as f:
                 f.write('*No Mic Input*')
@@ -4278,7 +3985,7 @@ def movement_loop():
             except:
                 print(traceback.format_exc())
                 brightness = 50
-            print('Brightness: '+str(brightness))
+            #print('Brightness: '+str(brightness))
             if brightness < 12 and b_start == False and b_gpt_sleep == False:
                 b_start = True
                 b_time = time.time()
@@ -4361,7 +4068,7 @@ def movement_loop():
                                     if nav_object in current_detection:
                                         target_detected = True
                                         if current_distance < 0.4:
-                                            movement_command = 'Do Nothing ~~ Navigation has finished successfully!'
+                                            movement_command = 'Wait ~~ Navigation has finished successfully!'
                                             yolo_nav = False
                                             nav_object = ''
                                             break
@@ -4398,7 +4105,7 @@ def movement_loop():
                                 rando_num = random.choice([1, 2])
                                 yolo_nav_was_true = True
                                 scan360 = 0
-                                movement_command = 'Do Nothing ~~ Target Lost. Going into Find Object mode.'
+                                movement_command = 'Wait ~~ Target Lost. Going into Find Object mode.'
                         elif yolo_look == True:
                             yolo_look_index = 0
                             while True:
@@ -4420,14 +4127,14 @@ def movement_loop():
                                         elif 'below' in current_detection:
                                             movement_command = 'Lower Camera Angle ~~ Target object is below'
                                         else:
-                                            movement_command = 'Do Nothing ~~ Target object is straight ahead'
+                                            movement_command = 'Wait ~~ Target object is straight ahead'
                                             yolo_look = False
                                             look_object = ''
                                         break
                                     else:
                                         yolo_look_index += 1
                                         if yolo_look_index >= len(yolo_detections):
-                                            movement_command = 'Do Nothing ~~ Target object lost'
+                                            movement_command = 'Wait ~~ Target object lost'
                                             yolo_look = False
                                             yolo_find = True
                                             look_object = ''
@@ -4437,7 +4144,7 @@ def movement_loop():
                                         else:
                                             continue
                                 except:
-                                    movement_command = 'Do Nothing ~~ Center Camera On Specific Yolo Object failed. Must be detecting object first.'
+                                    movement_command = 'Wait ~~ Center Camera On Specific Yolo Object failed. Must be detecting object first.'
                                     yolo_look = False
                                     look_object = ''
                                     break
@@ -4463,13 +4170,13 @@ def movement_loop():
                                             elif current_distance < 0.5:
                                                 movement_command = 'Move Backward ~~ Moving away from person'
                                             else:
-                                                movement_command = 'Do Nothing ~~ Person is straight ahead'
+                                                movement_command = 'Wait ~~ Person is straight ahead'
                                         print(movement_command)
                                         break
                                     else:
                                         yolo_look_index += 1
                                         if yolo_look_index >= len(yolo_detections):
-                                            movement_command = 'Do Nothing ~~ Person lost'
+                                            movement_command = 'Wait ~~ Person lost'
                                             print('person lost')
                                             follow_user = False
                                             yolo_find = True
@@ -4481,7 +4188,7 @@ def movement_loop():
                                         else:
                                             continue
                                 except:
-                                    movement_command = 'Do Nothing ~~ Follow Person failed. Must be detecting the person first.'
+                                    movement_command = 'Wait ~~ Follow Person failed. Must be detecting the person first.'
                                     print('person not detected')
                                     follow_user = False
                                     yolo_find = True
@@ -4510,7 +4217,7 @@ def movement_loop():
                                             movement_command = 'Turn Right 45 Degrees ~~ Target object is to My Right'
                                         else:
                                             yolo_find = False
-                                            movement_command = 'Do Nothing ~~ Ending search for '+nav_object+'. Object has successfully been found!'
+                                            movement_command = 'Wait ~~ Ending search for '+nav_object+'. Object has successfully been found!'
                                             if yolo_nav_was_true == True:
                                                 yolo_nav = True
                                                 yolo_nav_was_true = False
@@ -4563,19 +4270,13 @@ def movement_loop():
                                 g_speed = 30
                             else:
                                 pass
-                            print('g speed: ' +str(g_speed))
                             filename = datetime.now().strftime("%Y-%m-%d") + ".txt"
                     else:
                         movement_command = move_set[0]
                         del move_set[0]
-                    try:
-                        current_command = movement_command.split('~~')[0].strip().replace('.','')
-                    except:
-                        current_command = movement_command.strip().replace('.','')
-                    last_command = current_command
-                    current_command = current_command.lower().replace(' ', '')
-                    move_failed_command, move_failure_reason, yolo_nav, move_set, yolo_find, nav_object, look_object, follow_user, scan360, camera_vertical_pos, yolo_look, sleep_data, sleep_value, b_gpt_sleep = handle_movement_command(
-                        current_command,
+                  
+                 
+                    move_failed_command, move_failure_reason, yolo_nav, move_set, yolo_find, nav_object, look_object, follow_user, scan360, camera_vertical_pos, yolo_look, sleep_data, sleep_value, b_gpt_sleep = handle_commands(
                         distance,
                         current,
                         movement_command,
