@@ -1,4 +1,4 @@
-Image Server Setup Instructions:
+Image Server Setup Instructions (DO THIS BEFORE RUNNING MAIN.PY ON YOUR ROBOT!):
 
 1. Create a LINUX DigitalOcean droplet or similar vps and open the terminal.
 2. Use command "screen -S server"
