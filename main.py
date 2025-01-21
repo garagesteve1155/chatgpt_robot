@@ -1570,8 +1570,9 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         responder = "I am NOT in a conversation."
     dynamic_data4 = ''
     if phrase != '*No Mic Input*':
+    
         with open('current_convo.txt','a') as f:
-            f.write('\nPerson said: "'+phrase+'"')
+            f.write('\n'+name_of_person+' said: "'+phrase+'"')
         dynamic_data4 = dynamic_data4 + 'Mic Input From '+name_of_person+': '+phrase
     else:
         dynamic_data4 = dynamic_data4 + 'My Last Thought: '+internal_input
@@ -2252,6 +2253,9 @@ DO NOT omit any keys from your JSON response. Always include:
         print(name_of_person.strip())
         if name_of_person.strip() != 'unknown name of person' and name_of_person.strip() != 'unknown':
             print('Saving info for '+name_of_person)
+            directory = os.path.dirname('People/'+name_of_person+'/'+filename_data)
+            if directory and not os.path.exists(directory):
+                os.makedirs(directory, exist_ok=True)
             with open('People/'+name_of_person+'/'+filename_data, 'w+') as f:
                 f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         else:
@@ -2476,6 +2480,8 @@ def handle_commands(
     else:
         set_name_flag = 'false'
         set_name_text = 'false'
+    print('name flag: '+set_name_flag)
+    print('name text: '+set_name_text)
     if Set_Current_Task != 'false':
         try:
             set_task_flag = 'true'
@@ -3279,37 +3285,22 @@ def handle_commands(
         else:
             pass
         if set_name_flag == 'true':
+            print('name flag true')
             try:
-                with open('name_of_person.txt', 'r') as f:
-                    nop = f.read().lower().strip()
                 n_of_person = set_name_text
-                if nop != n_of_person:
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(current_command)
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    with open('name_of_person.txt', 'w+') as f:
-                        f.write(n_of_person)
-                else:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = Set_Name_Of_Person
-                    move_failure_reason = "I cannot set the name of the person to the same thing that it already is."
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-            except:
+                print("New name: "+n_of_person)
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                with open('name_of_person.txt', 'w+') as f:
+                    f.write(n_of_person)
+                print('saved person name')
+               
+            except Exception as e:
+                print(e)
                 yolo_nav = False
                 yolo_find = False
                 yolo_look = False
