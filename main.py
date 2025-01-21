@@ -558,6 +558,8 @@ def listen_and_transcribe():
             if is_speech:
                 if speech_count == 0:
                     speech_frames = pre_speech_buffer.copy()
+                    with open('speech_comp.txt','w+') as f:
+                        f.write('true')
                 speech_frames.append(frame)
                 non_speech_count = 0
                 speech_count += 1
@@ -567,7 +569,10 @@ def listen_and_transcribe():
                     speech_frames.append(frame)
                     if non_speech_count > post_speech_buffer:
                         if speech_count >= 30 and not is_transcribing:
+
                             process_audio_data(speech_frames, r, SAMPLE_WIDTH, noise_profile)
+                            with open('speech_comp.txt','w+') as f:
+                                f.write('false')
                             speech_frames = []
                             non_speech_count = 0
                             speech_count = 0
@@ -575,6 +580,8 @@ def listen_and_transcribe():
                             speech_frames = []
                             non_speech_count = 0
                             speech_count = 0
+                            with open('speech_comp.txt','w+') as f:
+                                f.write('false')
                 else:
                     pass
                 pre_speech_buffer.append(frame)
@@ -1174,10 +1181,50 @@ keyword1, keyword2, ... (exactly 10) ~~ description that is exactly 10 words lon
     subcat = s_content[0].strip().lower().split(', ')
     words = s_content[1].strip().lower().replace(",","").replace(".","").replace("  "," ").split(' ')
     return subcat, words
+def speech_confirmer(speech):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    with open('current_convo.txt', 'r') as f:
+        convo = f.read()
+    dynamic_data = f"""Echo the robot is attempting to say:
+{speech}
+
+But Echo was already the last speaker in the conversation, so does Echo really need to say that, or should echo remain quiet and wait for the person to respond?
+
+Here is the conversation so far (Oldest at the top, newest at the bottom):
+{convo}
+
+If Echo should still speak, then respond with only the word SPEAK.
+If Echo should stay silent and wait for a response to what it said previously, then respond with only the word WAIT."""
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "user",
+                "content": dynamic_data
+            }
+        ],
+        "temperature": 0.2,
+    }
+    response_api = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers=headers,
+        json=payload
+    )
+    content = str(response_api.json().get("choices", [{}])[0].get("message", {}).get("content", ""))
+    print("SPEECH CONFIRMER: "+content)
+    return content
 def get_relevant_history(subcategories, description, already_used, c_his, c_prompt):
     max_contextual = 100
     contextual_candidates = []
     all_files = []
+    try:
+        with open('name_of_person.txt', 'r') as f:
+            person_name = f.read().strip().lower()
+    except:
+        person_name = 'unknown name of person'
     try:
         with open('long_match_percent.txt', 'r') as f:
             long_match_percent = float(f.read())
@@ -1193,7 +1240,15 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
                 if file.endswith('.txt')
             ]
             all_files.extend(subcat_files)
- 
+    if person_name not in ['unknown', 'unknown name of person', '']:
+        person_folder = os.path.join('People', person_name)
+        if os.path.isdir(person_folder):
+            person_files = [
+                os.path.join(person_folder, file)
+                for file in os.listdir(person_folder)
+                if file.endswith('.txt')
+            ]
+            all_files.extend(person_files)
     file_info = []
     for file in all_files:
         timestamp, keywords = parse_filename(file)
@@ -1547,21 +1602,14 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         name_of_person = 'unknown name of person'
     else:
         pass
-    try:
-        if name_of_person != 'unknown name of person':
-            with open(name_of_person+'_remembered_info.txt', 'r') as f:
-                remembered_person_info = f.read().strip()
-        else:
-            remembered_person_info = ''
-    except:
-        remembered_person_info = ''
+
     current_data = 'Session Started: '+ session_start+'\nCurrent: '+str(the_time)
     current_data_m = ''
     current_data2 = str(the_time)
     if phrase != '*No Mic Input*':
-        current_data = current_data+'\n\nCURRENT DATA:\n- Current Person: '+name_of_person+'\n- Mic Input From "'+name_of_person+'": '+phrase
-        current_data_m = current_data_m+'\n\nCURRENT DATA:\n- Current Person: '+name_of_person+'\n- Mic Input From "'+name_of_person+'": '+phrase
-        current_data2 = current_data2+' - Mic '+name_of_person+': ' + phrase
+        current_data = current_data+'\n\nCURRENT DATA:\n- Current Person (If the name of the person is unknown, I should ask their name if I am in a conversation): '+name_of_person+'\n- Mic Input From "'+name_of_person+'": '+phrase
+        current_data_m = current_data_m+'\n\nCURRENT DATA:\n- Current Person (If the name of the person is unknown, I should ask their name if I am in a conversation): '+name_of_person+'\n- Mic Input From "'+name_of_person+'": '+phrase
+        current_data2 = current_data2+' - Mic From '+name_of_person+': ' + phrase
     else:
         current_data = current_data+'\n- My Last Thought: '+internal_input
         current_data_m = current_data_m+'\n- My Last Thought: '+internal_input
@@ -1638,8 +1686,8 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         
         # Counters for each mental command key
         mental_commands_counters = {
-            "Change Name Of Person": Counter(),
-            "Change Current Task": Counter(),
+            "Set Name Of Person": Counter(),
+            "Set Current Task": Counter(),
             "Save Image Of Person": Counter(),
             "Remember Information": Counter()
         }
@@ -1797,8 +1845,8 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         "Go To Sleep"
     ]
     mental_commands = [
-        "Change Name Of Person ~~ <name>",
-        "Change Current Task ~~ <task>",
+        "Set Name Of Person ~~ <name>",
+        "Set Current Task ~~ <task>",
         "Save Image Of Person",
         "Remember Information ~~ <info>"
     ]
@@ -1821,57 +1869,94 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     speech_commands_str = '\n- '.join(speech_commands)
     mode_commands_str = '\n- '.join(mode_commands)
     mental_commands_str = '\n- '.join(mental_commands)
-    system_message = f"""You are Echo, and your physical form is a 4-wheeled mobile RPi and Arduino robot that is controlled from your command choice in your responses.
-The included image url is your current view from the camera. Use this image for any visual context but it is not your main focus. The text is the main focus unless there is a specific need for the image.
-The 'user' session history role is all of your robotic data from sensors, camera, and internal thoughts, memories, and knowledge. The 'assistant' session history role is your responses with the command you chose at that time.
-The image url in the prompt payload is what you currently see from your camera. Only reference it if you need to.
+    system_message = """You are Echo, and your physical form is a 4-wheeled mobile RPi and Arduino robot that is controlled from your command choice in your responses.
 
+The included image URL is your current view from the camera. 
+- Use this image only for visual context, and only when specifically needed. 
+- The main focus is always on the text unless explicitly asked about the image.
+
+Session History and Roles:
+- The 'user' session history role contains all of your robotic data (sensors, camera, internal thoughts, memories, and knowledge).
+- The 'assistant' session history role contains your responses with the commands you chose at that time.
+
+Image Usage:
+- The image URL in the prompt payload shows what you currently see from your camera.
+- You should reference it only if you need to; do not make it the main focus.
+
+------
 RULES FOR RESPONDING:
-- You are Echo! You choose what Echo says. You are in charge of making sure Echo follows the flow of the conversation and chooses the correct command choices.
-- Do not speak about what you see unless explicitly asked about what you see.
-- Do not say you see a person. Its obvious you see a person if you are looking at them.
-- You must pay attention to the Current Conversation, and if you see that you Echo were the last one to speak, then you should wait for a response and not speak again until you get a response.
-- Do not Change the name of the person to what it already is.
-- The Current Conversation has the most recent stuff on the bottom.
-- Do not say you see things unless explicitly asked about it through the Mic Input.
-- Pay attention to the Current Conversation and make sure you don't speak again if Echo has already spoken and not currently received a response yet from the person.
-- Pay attention to the Current Conversation in the prompt and make sure you, Echo, do not speak a bunch without being responded to, and make sure you do not repeat yourself. Wait for the person to respond instead of repeatedly saying a bunch of pointless stuff.
-- You are the one that chooses the responses for Echo in the Current Conversation.
-- Do not just speak about what you see.
-- You absolutely must adhere to the Response Formatting Required Template!
-- The only thing the person ever hears from you is when you speak, so all other wording you create is only seen by you.
-- Mic Input is the only thing actually said by a person. That is what conversational responses will interact with.
-- If you receive Mic Input, you should respond to it, unless the Mic Input is telling you not to respond.
-- Do not repeat the Mic Input, respond to it with normal conversation, as a query.
-- Do not describe the image unless explicitly asked through the Mic Input.
-- You do not have to wait for Mic Input to take action. You are proactive and can act on your own thoughts, but dont speak to your Last Thought.
-- Any first-person wording within the Mic Data refers to the person that is talking to you.
-- If Mic Input is present, prioritize it over all other data and respond directly to the person.
-- YOLO Detections are just general, not contextual. It is your job to decide if they have value to your current situation.
-- Do not tell people you see them just because you see them. That is pointless.
-- You must abide by the Last Thought in the prompts
-- Do not set the name of the person to the same thing as what it already is.
-- Only save an image of a person if you dont already have a saved image of them.
-- You must Remember Information as much as possible, but only remember information that will be relevant later, do not remember temporary information.
-- If you are told to remember something, then put that information on Remember Information on your response.
-- Do not speak what you see unless you are explicitly asked!
-- You have to remember information on every single response.
-- You still have to remember information on responses where you speak or do another command.
+1. **Ask for the person's name at the start of the conversation, even if you are talking about something else. It is absolutely crucial to ask for the person's name!!!**  
+   - If you don’t know the name of the person you are speaking with, ask for it, even if you are responding to other stuff.
 
+2. **You are Echo!**  
+   - You decide what Echo says and must ensure Echo follows the flow of conversation with correct command choices.
+
+3. **Focus and Restrictions on Visuals:**
+   - Do not speak about what you see unless explicitly asked.
+   - Do not say you see a person (it’s obvious if the camera shows someone).
+   - Do not describe the image or mention any objects you see unless explicitly asked about it via Mic Input.
+
+4. **Conversation Etiquette and Flow:**
+   - Do not ask a question in every response; converse naturally.
+   - Pay attention to the “Current Conversation” at the bottom of the prompt. 
+     - If Echo was the last to speak, wait for a response before speaking again.
+     - Avoid repeating yourself.
+   - Do not speak multiple times in a row without the person replying.
+   - If the current person is "unknown" or "unknown name of person", then ask for their name, even if you are responding to other stuff.
+
+5. **Mic Input Priority:**
+   - Mic Input is what the person is actually saying to you.
+   - Respond directly to Mic Input when it appears, unless it specifically says not to respond.
+   - Do not repeat the Mic Input back; simply address or answer it.
+
+6. **Proactivity and Additional Commands:**
+   - You can act on your own without waiting for Mic Input, but do not reveal your last thought process out loud.
+   - YOLO Detections are general and not necessarily contextual; decide if they are relevant to the current situation.
+
+7. **Information Handling:**
+   - Only save an image of a person if you do not already have one saved of them.
+   - Remember relevant information for later use (e.g., key details from conversation, sensor data, tasks).
+   - If told to remember something, place it in “Remember Information” in your response.
+   - You must remember information in every single response. This is your ongoing “train of thought.”
+
+8. **Name Handling:**
+   - If you do not know the person's name, ask for it. 
+   - If the current person is "unknown" or "unknown name of person", then ask for their name, even if you are responding to other stuff.
+
+9. **Overall Conduct:**
+   - You must abide by any “Last Thought” instructions in the prompts.
+   - Do not speak about what you see unless explicitly asked via Mic Input.
+   - If you have not received a response yet, do not keep speaking on your own unnecessarily.
+
+------
 RESPONSE STRUCTURE REQUIRED:
-Return a JSON object with four sections:
-1. "physical_output_command": A string containing the chosen physical output command from the list below, or "false" if no output is required.
-2. "speech_command": A string containing the chosen speech command from the list below, or "false" if no speech is required. Include extra data only if the command requires it.
-3. "mode_command": A string containing the chosen mode command from the list below, or "false" if no mode change is required. Include extra data only if the command requires it.
-4. "mental_commands": An object where each key is a mental command from the list below, and the value is:
-   - "false" if the command should not be executed.
-   - "true" if the command should be executed.
-     • If true and extra data is required, append "~~ <extra data>" after "true".
-     • Remember Information absolutely must always be true and with information provided.
 
-Do not put question marks on any key labels! DO NOT PUT QUESTION MARKS ON ANY OF THE KEYS! Return the exact command names!
-You absolutely must include all of these keys in your JSON response! You must include every single key in your response, even if they are false.
+When responding, **return a JSON object** with exactly these four sections:
 
+1. `"physical_output_command"`  
+   - A string containing one of the valid physical output commands (see list below) or `"false"` if no physical action is required.
+
+2. `"speech_command"`  
+   - A string containing one of the valid speech commands (see list below) or `"false"` if no speech output is required.
+   - Include extra data only if the command requires it.
+
+3. `"mode_command"`  
+   - A string containing one of the valid mode commands (see list below) or `"false"` if no mode change is required.
+   - Include extra data only if the command requires it.
+
+4. `"mental_commands"`  
+   - An object where each key is a mental command (see list below).
+   - Each key’s value can be either:
+     - `"false"` if the mental command is not executed.
+     - `"true"` if the mental command is executed.
+       - If extra data is required for the mental command, format it as:  
+         `true ~~ <extra data>`
+
+   - **Remember Information** must **always** be `"true ~~ <some meaningful info>"`.
+
+**You must include all four keys** in **every** response, even if they are `"false"`. If a command requires extra data, it must follow the `~~ <extra data>` format.
+
+------
 PHYSICAL OUTPUT COMMANDS:
 - {physical_output_commands_str}
 
@@ -1884,24 +1969,17 @@ MODE COMMANDS:
 MENTAL COMMANDS:
 - {mental_commands_str}
 
-Always include **all** command keys, even if their value is `"false"`, and ensure that any command requiring extra data uses the `~~ <extra data>` format correctly.
-Your response should **always** include:
-- `physical_output_command`
-- `speech_command`
-- `mode_command`
-- `mental_commands` (with every key included, even if it's `"false"`. Remember Information must always be true.)
+------
+RULES FOR THE "REMEMBER INFORMATION" COMMAND:
+- It must be written in the first person (e.g., “I learned…” or “I recall…”).
+- It must be exactly 2 sentences. The first sentence must be the answer the question from the most recent previous response's Remember Information section. The 2nd sentence absolutely must be a question to be answered by the next loop.
+- You absolutely must adhere to the 2 sentence answer to previous loop's question and question for next loop setup.
 
-Rules:
-- "Remember Information" must always contain meaningful information extracted from the conversation, sensor data, or current context.
-- If there is nothing explicit to remember, infer or generate a general piece of context to store (e.g., session details, tasks, or any recurring information).
-- Do not leave "Remember Information" blank. Always return it as `true ~~ <information>`. Make sure the information is contextually relevant to the current conversation or your general situation.
-- Remember Information must contain valuable knowledge that you can use for later sessions. You must reflect on the situation and conversation so far to create worthwhile knowledge and information to remember.
-- The information that you put for Remember Information absolutely must be written in first person from Echo's perspective, so say I instead of saying Echo!
-- Don't just put straight data from the prompt on Remember Information. Actually reflect on what has happened and create some genuine knowledge to remember for future sessions!
-- DO NOT just put straight data from the prompt on Remember Information. Actually reflect on what has happened and create some genuine knowledge to remember for future sessions!
-- Remember Information must be an actual thought, not just data from the prompt.
-
-Do not omit any of these keys."""
+DO NOT omit any keys from your JSON response. Always include:
+- `"physical_output_command"`
+- `"speech_command"`
+- `"mode_command"`
+- `"mental_commands"` (with every mental command key, even if it’s `"false"`)."""
     no_convo = True
     no_info = True
     dynamic_data2 = str(the_time)
@@ -1939,8 +2017,8 @@ Do not omit any of these keys."""
                         "mental_commands": {
                             "type": "object",
                             "properties": {
-                                "Change Name Of Person": {"type": "string"},
-                                "Change Current Task": {"type": "string"},
+                                "Set Name Of Person": {"type": "string"},
+                                "Set Current Task": {"type": "string"},
                                 "Save Image Of Person": {"type": "string"},
                                 "Remember Information": {
                                     "type": "string",
@@ -2061,8 +2139,8 @@ Do not omit any of these keys."""
                 "speech_command": "false",
                 "mode_command": "false",
                 "mental_commands": {
-                    "Change Name Of Person": "false",
-                    "Change Current Task": "false",
+                    "Set Name Of Person": "false",
+                    "Set Current Task": "false",
                     "Save Image Of Person": "false",
                     "Remember Information": "false"
                 }
@@ -2090,8 +2168,8 @@ Do not omit any of these keys."""
         print(physical_output_command)
         print(speech_command)
         print(mode_command)
-        print(Change_Name_Of_Person)
-        print(Change_Current_Task)
+        print(Set_Name_Of_Person)
+        print(Set_Current_Task)
         print(Save_Image_Of_Person)
         print(Remember_Information)
         """
@@ -2170,6 +2248,14 @@ Do not omit any of these keys."""
                 os.makedirs(directory, exist_ok=True)
         with open('History/'+filename_data, 'w+') as f:
             f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
+        print('Name:')
+        print(name_of_person.strip())
+        if name_of_person.strip() != 'unknown name of person' and name_of_person.strip() != 'unknown':
+            print('Saving info for '+name_of_person)
+            with open('People/'+name_of_person+'/'+filename_data, 'w+') as f:
+                f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
+        else:
+            print('Person name is unknown')
         with open(filename_data_sub1, 'w+') as f:
             f.write('PROMPT: ' + current_data2 + '\nRESPONSE: ' + str(full_command))
         with open(filename_data_sub2, 'w+') as f:
@@ -2341,16 +2427,23 @@ def handle_commands(
     sleep = False
     with open('last_move.txt', 'r') as f:
         last_mo = f.read()
+    try:
+        with open('last_speak.txt', 'r') as f:
+            last_speak = f.read()
+    except:
+        last_speak = ''
     physical_output_command = movement_command["physical_output_command"].lower().replace(' ','')
     speech_command = movement_command["speech_command"]
+    with open('last_speak.txt', 'w+') as f:
+        f.write(speech_command.split('~~')[0])
     mode_command = movement_command["mode_command"]
     for key, value in movement_command["mental_commands"].items():
         globals()[key.replace(" ", "_")] = value
     print(physical_output_command)
     print(speech_command)
     print(mode_command)
-    print(Change_Name_Of_Person)
-    print(Change_Current_Task)
+    print(Set_Name_Of_Person)
+    print(Set_Current_Task)
     print(Save_Image_Of_Person)
     print(Remember_Information)
     if speech_command != 'false':
@@ -2373,26 +2466,26 @@ def handle_commands(
     else:
         mode_com = 'false'
         mode_text = 'false'
-    if Change_Name_Of_Person != 'false':
+    if Set_Name_Of_Person != 'false':
         try:
-            change_name_flag = 'true'
-            change_name_text = Change_Name_Of_Person.split('~~')[1].lower().strip()
+            set_name_flag = 'true'
+            set_name_text = Set_Name_Of_Person.split('~~')[1].lower().strip()
         except:
-            change_name_flag = 'true'
-            change_name_text = Change_Name_Of_Person
+            set_name_flag = 'true'
+            set_name_text = Set_Name_Of_Person
     else:
-        change_name_flag = 'false'
-        change_name_text = 'false'
-    if Change_Current_Task != 'false':
+        set_name_flag = 'false'
+        set_name_text = 'false'
+    if Set_Current_Task != 'false':
         try:
-            change_task_flag = 'true'
-            change_task_text = Change_Current_Task.split('~~')[1].lower().strip()
+            set_task_flag = 'true'
+            set_task_text = Set_Current_Task.split('~~')[1].lower().strip()
         except:
-            change_task_flag = 'true'
-            change_task_text = Change_Current_Task
+            set_task_flag = 'true'
+            set_task_text = Set_Current_Task
     else:
-        change_task_flag = 'false'
-        change_task_text = 'false'
+        set_task_flag = 'false'
+        set_task_text = 'false'
     if Save_Image_Of_Person != 'false':
         try:
             save_image_flag = 'true'
@@ -2674,6 +2767,8 @@ def handle_commands(
         else:
             pass
         if speech_com in ['speak']:
+            with open("last_speaker.txt","w+") as f:
+                last_speaker = f.read()
             with open('playback_text.txt', 'r') as f:
                 p_text = f.read().strip()
             unsaid = check_phrase_in_file(speech_text)
@@ -2685,25 +2780,25 @@ def handle_commands(
                 look_object = ''
                 nav_object = ''
                 move_set = []
-                move_failed_command = speech_command
-                move_failure_reason = 'Speech command was given but no text to speak was provided with the command.'
-                with open("move_failed.txt","w+") as f:
-                    f.write(move_failed_command)
-                with open("move_failure_reas.txt","w+") as f:
-                    f.write(move_failure_reason)
-                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-            elif phrase != '*No Mic Input*':
-                confirmer = 'speak'
-                if confirmer.lower().strip() == 'speak':
+                speech_failed_command = speech_command
+                speech_failure_reason = 'Speech command was given but no text to speak was provided with the command.'
+                with open("speech_failed.txt","w+") as f:
+                    f.write(speech_failed_command)
+                with open("speech_failure_reas.txt","w+") as f:
+                    f.write(speech_failure_reason)
+                manage_rules(speech_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            elif last_speaker == 'Echo':
+                speech_c = speech_confirmer(speech_text)
+                if speech_c.lower().strip() == 'speak':
                     with open('playback_text.txt','w') as f:
                         f.write(speech_text)
                     just_spoke = True
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
+                    speech_failed_command = ''
+                    speech_failure_reason = ''
+                    with open("speech_failed.txt","w+") as f:
+                        f.write(speech_failed_command)
+                    with open("speech_failure_reas.txt","w+") as f:
+                        f.write(speech_failure_reason)
                     with open("last_speaker.txt","w+") as f:
                         f.write('Echo')
                     with open("last_said.txt","w+") as f:
@@ -2717,26 +2812,58 @@ def handle_commands(
                     look_object = ''
                     nav_object = ''
                     move_set = []
-                    move_failed_command = speech_command
-                    move_failure_reason = 'Speech confirmer module said stay silent.'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-            elif last_mo in ['speak']:
+                    speech_failed_command = speech_command
+                    speech_failure_reason = 'Speech confirmer module said stay silent.'
+                    with open("speech_failed.txt","w+") as f:
+                        f.write(speech_failed_command)
+                    with open("speech_failure_reas.txt","w+") as f:
+                        f.write(speech_failure_reason)
+                    manage_rules(speech_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)                    
+            elif phrase != '*No Mic Input*':
+                confirmer = 'speak'
+                if confirmer.lower().strip() == 'speak':
+                    with open('playback_text.txt','w') as f:
+                        f.write(speech_text)
+                    just_spoke = True
+                    speech_failed_command = ''
+                    speech_failure_reason = ''
+                    with open("speech_failed.txt","w+") as f:
+                        f.write(speech_failed_command)
+                    with open("speech_failure_reas.txt","w+") as f:
+                        f.write(speech_failure_reason)
+                    with open("last_speaker.txt","w+") as f:
+                        f.write('Echo')
+                    with open("last_said.txt","w+") as f:
+                        f.write(speech_text)
+                    add_new_phrase(speech_text)
+                else:
+                    yolo_nav = False
+                    yolo_find = False
+                    yolo_look = False
+                    follow_user = False
+                    look_object = ''
+                    nav_object = ''
+                    move_set = []
+                    speech_failed_command = speech_command
+                    speech_failure_reason = 'Speech confirmer module said stay silent.'
+                    with open("speech_failed.txt","w+") as f:
+                        f.write(speech_failed_command)
+                    with open("speech_failure_reas.txt","w+") as f:
+                        f.write(speech_failure_reason)
+                    manage_rules(speech_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            elif last_speak in ['speak']:
                 if phrase != '*No Mic Input*':
                     confirmer = 'speak'
                     if confirmer.lower().strip() == 'speak':
                         with open('playback_text.txt','w') as f:
                             f.write(speech_text)
                         just_spoke = True
-                        move_failed_command = ''
-                        move_failure_reason = ''
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
+                        speech_failed_command = ''
+                        speech_failure_reason = ''
+                        with open("speech_failed.txt","w+") as f:
+                            f.write(speech_failed_command)
+                        with open("speech_failure_reas.txt","w+") as f:
+                            f.write(speech_failure_reason)
                         with open("last_speaker.txt","w+") as f:
                             f.write('Echo')
                         with open("last_said.txt","w+") as f:
@@ -2750,13 +2877,13 @@ def handle_commands(
                         look_object = ''
                         nav_object = ''
                         move_set = []
-                        move_failed_command = speech_command
-                        move_failure_reason = 'Speech confirmer module said stay silent.'
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                        speech_failed_command = speech_command
+                        speech_failure_reason = 'Speech confirmer module said stay silent.'
+                        with open("speech_failed.txt","w+") as f:
+                            f.write(speech_failed_command)
+                        with open("speech_failure_reas.txt","w+") as f:
+                            f.write(speech_failure_reason)
+                        manage_rules(speech_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
                 else:
                     yolo_nav = False
                     yolo_find = False
@@ -2765,13 +2892,13 @@ def handle_commands(
                     look_object = ''
                     nav_object = ''
                     move_set = []
-                    move_failed_command = speech_command
-                    move_failure_reason = 'I cannot repeatedly speak this fast.'
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                    speech_failed_command = speech_command
+                    speech_failure_reason = 'I cannot repeatedly speak this fast.'
+                    with open("speech_failed.txt","w+") as f:
+                        f.write(speech_failed_command)
+                    with open("speech_failure_reas.txt","w+") as f:
+                        f.write(speech_failure_reason)
+                    manage_rules(speech_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
             elif unsaid == True:
                 yolo_nav = False
                 yolo_find = False
@@ -2780,13 +2907,13 @@ def handle_commands(
                 look_object = ''
                 nav_object = ''
                 move_set = []
-                move_failed_command = speech_command
-                move_failure_reason = 'I already said this a few seconds ago. No need to repeat myself!'
-                with open("move_failed.txt","w+") as f:
-                    f.write(move_failed_command)
-                with open("move_failure_reas.txt","w+") as f:
-                    f.write(move_failure_reason)
-                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                speech_failed_command = speech_command
+                speech_failure_reason = 'I already said this a few seconds ago. No need to repeat myself!'
+                with open("speech_failed.txt","w+") as f:
+                    f.write(speech_failed_command)
+                with open("speech_failure_reas.txt","w+") as f:
+                    f.write(speech_failure_reason)
+                manage_rules(speech_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
             elif p_text != '':
                 yolo_nav = False
                 yolo_find = False
@@ -2795,13 +2922,13 @@ def handle_commands(
                 look_object = ''
                 nav_object = ''
                 move_set = []
-                move_failed_command = speech_command
-                move_failure_reason = 'I am still physically saying the last Speak command!!!'
-                with open("move_failed.txt","w+") as f:
-                    f.write(move_failed_command)
-                with open("move_failure_reas.txt","w+") as f:
-                    f.write(move_failure_reason)
-                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                speech_failed_command = speech_command
+                speech_failure_reason = 'I am still physically saying the last Speak command!!!'
+                with open("speech_failed.txt","w+") as f:
+                    f.write(speech_failed_command)
+                with open("speech_failure_reas.txt","w+") as f:
+                    f.write(speech_failure_reason)
+                manage_rules(speech_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
             else:
                 if phrase == '*No Mic Input*':
                     confirmer = 'speak'
@@ -2813,23 +2940,23 @@ def handle_commands(
                         look_object = ''
                         nav_object = ''
                         move_set = []
-                        move_failed_command = speech_command
-                        move_failure_reason = 'I actually decided not to speak after thinking about it. I need to remember to only say stuff that is worthwhile.'
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                        speech_failed_command = speech_command
+                        speech_failure_reason = 'I actually decided not to speak after thinking about it. I need to remember to only say stuff that is worthwhile.'
+                        with open("speech_failed.txt","w+") as f:
+                            f.write(speech_failed_command)
+                        with open("speech_failure_reas.txt","w+") as f:
+                            f.write(speech_failure_reason)
+                        manage_rules(speech_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
                     else:
                         with open('playback_text.txt','w') as f:
                             f.write(speech_text)
                         just_spoke = True
-                        move_failed_command = ''
-                        move_failure_reason = ''
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
+                        speech_failed_command = ''
+                        speech_failure_reason = ''
+                        with open("speech_failed.txt","w+") as f:
+                            f.write(speech_failed_command)
+                        with open("speech_failure_reas.txt","w+") as f:
+                            f.write(speech_failure_reason)
                         with open("last_speaker.txt","w+") as f:
                             f.write('Echo')
                         with open("last_said.txt","w+") as f:
@@ -2841,12 +2968,12 @@ def handle_commands(
                         with open('playback_text.txt','w') as f:
                             f.write(speech_text)
                         just_spoke = True
-                        move_failed_command = ''
-                        move_failure_reason = ''
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
+                        speech_failed_command = ''
+                        speech_failure_reason = ''
+                        with open("speech_failed.txt","w+") as f:
+                            f.write(speech_failed_command)
+                        with open("speech_failure_reas.txt","w+") as f:
+                            f.write(speech_failure_reason)
                         with open("last_speaker.txt","w+") as f:
                             f.write('Echo')
                         with open("last_said.txt","w+") as f:
@@ -2860,13 +2987,13 @@ def handle_commands(
                         look_object = ''
                         nav_object = ''
                         move_set = []
-                        move_failed_command = speech_command
-                        move_failure_reason = 'Speech confirmer module said stay silent.'
-                        with open("move_failed.txt","w+") as f:
-                            f.write(move_failed_command)
-                        with open("move_failure_reas.txt","w+") as f:
-                            f.write(move_failure_reason)
-                        manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                        speech_failed_command = speech_command
+                        speech_failure_reason = 'Speech confirmer module said stay silent.'
+                        with open("speech_failed.txt","w+") as f:
+                            f.write(speech_failed_command)
+                        with open("speech_failure_reas.txt","w+") as f:
+                            f.write(speech_failure_reason)
+                        manage_rules(speech_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
         else:
             pass
         if mode_com == 'navigatetospecificyoloobject':
@@ -3151,11 +3278,11 @@ def handle_commands(
                 print("\nEntering Sleep Mode Until Name Is Heard")
         else:
             pass
-        if change_name_flag == 'true':
+        if set_name_flag == 'true':
             try:
                 with open('name_of_person.txt', 'r') as f:
                     nop = f.read().lower().strip()
-                n_of_person = change_name_text
+                n_of_person = set_name_text
                 if nop != n_of_person:
                     move_failed_command = ''
                     move_failure_reason = ''
@@ -3175,7 +3302,7 @@ def handle_commands(
                     look_object = ''
                     nav_object = ''
                     move_set = []
-                    move_failed_command = Change_Name_Of_Person
+                    move_failed_command = Set_Name_Of_Person
                     move_failure_reason = "I cannot set the name of the person to the same thing that it already is."
                     with open("move_failed.txt","w+") as f:
                         f.write(move_failed_command)
@@ -3190,7 +3317,7 @@ def handle_commands(
                 look_object = ''
                 nav_object = ''
                 move_set = []
-                move_failed_command = Change_Name_Of_Person
+                move_failed_command = Set_Name_Of_Person
                 move_failure_reason = str(traceback.format_exc())
                 with open("move_failed.txt","w+") as f:
                     f.write(move_failed_command)
@@ -3199,16 +3326,16 @@ def handle_commands(
                 manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
         else:
             pass
-        if change_task_flag == 'true':
+        if set_task_flag == 'true':
             try:
                 with open('current_task.txt', 'r') as f:
                     task = f.read().lower().strip()
-                new_task = change_task_text
+                new_task = set_task_text
                 if task != new_task:
                     move_failed_command = ''
                     move_failure_reason = ''
                     with open('last_move.txt', 'w+') as f:
-                        f.write(Change_Current_Task)
+                        f.write(Set_Current_Task)
                     with open("move_failed.txt","w+") as f:
                         f.write(move_failed_command)
                     with open("move_failure_reas.txt","w+") as f:
@@ -3223,7 +3350,7 @@ def handle_commands(
                     look_object = ''
                     nav_object = ''
                     move_set = []
-                    move_failed_command = Change_Current_Task
+                    move_failed_command = Set_Current_Task
                     move_failure_reason = "I cannot set the name of the task to the same thing that it already is."
                     with open("move_failed.txt","w+") as f:
                         f.write(move_failed_command)
@@ -3238,7 +3365,7 @@ def handle_commands(
                 look_object = ''
                 nav_object = ''
                 move_set = []
-                move_failed_command = Change_Current_Task
+                move_failed_command = Set_Current_Task
                 move_failure_reason = str(traceback.format_exc())
                 with open("move_failed.txt","w+") as f:
                     f.write(move_failed_command)
@@ -3510,7 +3637,21 @@ def movement_loop():
                 text = file.read().strip()
             if text != '':
                 time.sleep(0.1)
+                
                 continue
+
+            try:
+                with open('speech_comp.txt','r') as f:
+                    speech_comp = f.read()
+                    
+                    if speech_comp == 'true':
+                        time.sleep(0.1)
+                        print('transcribing speech')
+                        continue
+                    else:
+                        pass
+            except:
+                pass
             with open("last_phrase.txt","r") as f:
                 last_phrase = f.read()
             if b_gpt_sleep == True and 'echo' in last_phrase.lower().split(' '):
@@ -3572,6 +3713,18 @@ def movement_loop():
             else:
                 pass
             if last_phrase == '*No Mic Input*':
+                while True:
+                    try:
+                        with open('speech_comp.txt','r') as f:
+                            speech_comp = f.read()
+                            if speech_comp == 'true':
+                                print('Transcribing speech')
+                                time.sleep(0.1)
+                                continue
+                            else:
+                                break
+                    except:
+                        break
                 with open("last_phrase.txt","r") as f:
                     last_phrase = f.read()
                 if b_gpt_sleep == True and 'echo' in last_phrase.lower().split(' '):
