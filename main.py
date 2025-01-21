@@ -1175,16 +1175,14 @@ keyword1, keyword2, ... (exactly 10) ~~ description that is exactly 10 words lon
     words = s_content[1].strip().lower().replace(",","").replace(".","").replace("  "," ").split(' ')
     return subcat, words
 def get_relevant_history(subcategories, description, already_used, c_his, c_prompt):
-    max_contextual = 30
+    max_contextual = 100
     contextual_candidates = []
     all_files = []
     try:
         with open('long_match_percent.txt', 'r') as f:
             long_match_percent = float(f.read())
-        with open('recent_match_percent.txt', 'r') as f:
-            recent_match_percent = float(f.read())
     except:
-        recent_match_percent = 0.1
+        
         long_match_percent = 0.1
     for subcat in subcategories:
         subcat_path = os.path.join('History', subcat)
@@ -1195,12 +1193,7 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
                 if file.endswith('.txt')
             ]
             all_files.extend(subcat_files)
-    recent_files = [
-        os.path.join('History', file)
-        for file in os.listdir('History')
-        if file.endswith('.txt')
-    ]
-    all_files.extend(recent_files)
+ 
     file_info = []
     for file in all_files:
         timestamp, keywords = parse_filename(file)
@@ -1215,48 +1208,23 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
         if matched_count >= int(len(description_lower) * long_match_percent):
             contextual_candidates.append((timestamp, file_path, matched_count))
             long_matches += 1
-    file_info = []
-    for file in recent_files:
-        timestamp, keywords = parse_filename(file)
-        if timestamp not in already_used:
-            file_info.append((timestamp, keywords, file))
-    sorted_files = sorted(file_info, key=lambda x: x[0], reverse=True)
-    recent_matches = 0
-    for timestamp, keywords, file_path in sorted_files:
-        normalized_keywords = {kw.lower().strip() for kw in keywords}
-        description_lower = [word.lower().strip() for word in description]
-        matched_count = sum(1 for w in description_lower if w in normalized_keywords)
-        if matched_count >= int(len(description_lower) * recent_match_percent):
-            contextual_candidates.append((timestamp, file_path, matched_count))
-            recent_matches += 1
+ 
     contextual_candidates.sort(key=lambda x: (x[2], x[0]), reverse=True)
     top_candidates = contextual_candidates[:max_contextual]
-    if recent_matches == 0:
-        recent_match_percent -= 0.01
-        if recent_match_percent < 0.0:
-            recent_match_percent = 0.0
-    elif recent_matches > 25:
-        recent_match_percent += 0.01
-        if recent_match_percent > 0.99:
-            recent_match_percent = 0.99
-    else:
-        pass
+    
     if long_matches == 0:
         long_match_percent -= 0.01
         if long_match_percent < 0.0:
             long_match_percent = 0.0
-    elif long_matches > 25:
+    elif long_matches > 100:
         long_match_percent += 0.01
         if long_match_percent > 0.99:
             long_match_percent = 0.99
     else:
         pass
     print('long_match_percent: '+format(long_match_percent,'.3f'))
-    print('recent_match_percent: '+format(recent_match_percent,'.3f'))
     with open('long_match_percent.txt', 'w+') as f:
         f.write(str(long_match_percent))
-    with open('recent_match_percent.txt', 'w+') as f:
-        f.write(str(recent_match_percent))
     message_info = {}
     command_counts = {}
     for candidate in top_candidates:
