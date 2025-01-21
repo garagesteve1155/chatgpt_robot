@@ -1212,10 +1212,10 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
     contextual_candidates.sort(key=lambda x: (x[2], x[0]), reverse=True)
     top_candidates = contextual_candidates[:max_contextual]
     
-    if long_matches == 0:
+    if long_matches < 1:
         long_match_percent -= 0.01
-        if long_match_percent < 0.0:
-            long_match_percent = 0.0
+        if long_match_percent < 0.01:
+            long_match_percent = 0.01
     elif long_matches > 100:
         long_match_percent += 0.01
         if long_match_percent > 0.99:
@@ -1893,20 +1893,10 @@ Rules:
 - "Remember Information" must always contain meaningful information extracted from the conversation, sensor data, or current context.
 - If there is nothing explicit to remember, infer or generate a general piece of context to store (e.g., session details, tasks, or any recurring information).
 - Do not leave "Remember Information" blank. Always return it as `true ~~ <information>`. Make sure the information is contextually relevant to the current conversation or your general situation.
-- Remember Information must contain valuable knowledge that you can use later.
+- Remember Information must contain valuable knowledge that you can use for later sessions. You must reflect on the situation and conversation so far to create worthwhile knowledge and information to remember.
 - The information that you put for Remember Information absolutely must be written in first person from Echo's perspective, so say I instead of saying Echo!
 
 Do not omit any of these keys."""
-    """
-     I should only save an image of a person if I don't already have one.
-steven and brittany are dating
-the sky is blue here on earth
-change name of person should be false if the name of the person is already what you're wanting to change it to
-be more liberal about remembering information
-never let echo repeat itself
-never say that i see someone again
-if echo is the last person to have said something on the current conversation then you cannot say anything until the person has said something
-    """
     no_convo = True
     no_info = True
     dynamic_data2 = str(the_time)
