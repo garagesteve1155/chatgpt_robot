@@ -1757,10 +1757,12 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         except Exception as e:
             #print(f"Error processing memory: {e}")
             continue
-
-    # Join remembered items with a dash for display
-    remembered_info = '\n- '.join(remembered_info_list)
-    remembered_info = 'Contextually Relevant Information I Remember From Past Sessions:\n- '+remembered_info
+    if remembered_info_list != []:
+        # Join remembered items with a dash for display
+        remembered_info = '\n- '.join(remembered_info_list)
+        remembered_info = 'Contextually Relevant Remembered Information From Past Sessions (Long Term Memories):\n- '+remembered_info
+    else:
+        remembered_info = "I cant think of any long term memories that I have from a similar situation to the present, so this situation must be a new experience for me."
     current_history = recent_history
     def extract_timestamp(entry):
         match = re.search(r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}", entry)
@@ -1895,6 +1897,9 @@ Rules:
 - Do not leave "Remember Information" blank. Always return it as `true ~~ <information>`. Make sure the information is contextually relevant to the current conversation or your general situation.
 - Remember Information must contain valuable knowledge that you can use for later sessions. You must reflect on the situation and conversation so far to create worthwhile knowledge and information to remember.
 - The information that you put for Remember Information absolutely must be written in first person from Echo's perspective, so say I instead of saying Echo!
+- Don't just put straight data from the prompt on Remember Information. Actually reflect on what has happened and create some genuine knowledge to remember for future sessions!
+- DO NOT just put straight data from the prompt on Remember Information. Actually reflect on what has happened and create some genuine knowledge to remember for future sessions!
+- Remember Information must be an actual thought, not just data from the prompt.
 
 Do not omit any of these keys."""
     no_convo = True
@@ -3566,6 +3571,40 @@ def movement_loop():
                 print('\nBrightness sleep on')
             else:
                 pass
+            if last_phrase == '*No Mic Input*':
+                with open("last_phrase.txt","r") as f:
+                    last_phrase = f.read()
+                if b_gpt_sleep == True and 'echo' in last_phrase.lower().split(' '):
+                        b_gpt_sleep = False
+                        with open('error_rate.txt','w+') as f:
+                            f.write('0')
+                        now = datetime.now()
+                        the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                        with open('session_start.txt', 'w+') as f:
+                            f.write(str(the_time))
+                        with open('sleep.txt', 'w+') as f:
+                            f.write(str(b_gpt_sleep))
+                        b_start = False
+                        g_speed = 0
+                        yolo_nav = False
+                        yolo_find = False
+                        yolo_look = False
+                        follow_user = False
+                        move_set = []
+                else:
+                    if last_phrase != '*No Mic Input*' and last_phrase != '':
+                        g_speed = 0
+                        yolo_nav = False
+                        yolo_find = False
+                        yolo_look = False
+                        follow_user = False
+                        move_set = []
+                    else:
+                        last_phrase = '*No Mic Input*'
+            else:
+                pass
+            with open("last_phrase.txt","w+") as f:
+                f.write('*No Mic Input*')
             finished_cycle = False
             with open('output.txt','r') as file:
                 yolo_detections = file.read().split('\n')
