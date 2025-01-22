@@ -418,7 +418,7 @@ def handle_playback(stream):
         is_transcribing = True
         subprocess.call(['espeak', '-v', 'en-us', '-s', '180', '-p', '130', '-a', '200', '-w', 'temp.wav', text])
         set_max_volume(audio_card_number)
-        #subprocess.check_call(["aplay", "-D", "plughw:{}".format(audio_card_number), 'temp.wav'])
+        subprocess.check_call(["aplay", "-D", "plughw:{}".format(audio_card_number), 'temp.wav'])
         os.remove('temp.wav')
         open('playback_text.txt', 'w').close()
         stream.start_stream()
