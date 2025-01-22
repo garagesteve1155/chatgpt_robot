@@ -209,7 +209,8 @@ files_to_clear = [
 folders_to_clear = [
     'History',
     'History_dataset',
-    'History_dataset_mental'
+    'History_dataset_mental',
+    'People'
 ]
 time.sleep(2)
 deleter = input("Delete All Memories????? (Yes or No): ")
@@ -417,7 +418,7 @@ def handle_playback(stream):
         is_transcribing = True
         subprocess.call(['espeak', '-v', 'en-us', '-s', '180', '-p', '130', '-a', '200', '-w', 'temp.wav', text])
         set_max_volume(audio_card_number)
-        subprocess.check_call(["aplay", "-D", "plughw:{}".format(audio_card_number), 'temp.wav'])
+        #subprocess.check_call(["aplay", "-D", "plughw:{}".format(audio_card_number), 'temp.wav'])
         os.remove('temp.wav')
         open('playback_text.txt', 'w').close()
         stream.start_stream()
@@ -1231,7 +1232,6 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
         with open('long_match_percent.txt', 'r') as f:
             long_match_percent = float(f.read())
     except:
-        
         long_match_percent = 0.1
     for subcat in subcategories:
         subcat_path = os.path.join('History', subcat)
@@ -1263,22 +1263,16 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
         description_lower = [word.lower().strip() for word in description]
         matched_count = sum(1 for w in description_lower if w in normalized_keywords)
         if matched_count >= int(len(description_lower) * long_match_percent):
+            
             contextual_candidates.append((timestamp, file_path, matched_count))
             long_matches += 1
- 
+    print("LENGTHS:")
+    print(len(all_files))
+    print(len(file_info))
+    print(len(sorted_files))
+    print(len(contextual_candidates))
     contextual_candidates.sort(key=lambda x: (x[2], x[0]), reverse=True)
-    top_candidates = contextual_candidates[:max_contextual]
-    
-    if long_matches < 1:
-        long_match_percent -= 0.01
-        if long_match_percent < 0.01:
-            long_match_percent = 0.01
-    elif long_matches > 100:
-        long_match_percent += 0.01
-        if long_match_percent > 0.99:
-            long_match_percent = 0.99
-    else:
-        pass
+    top_candidates = contextual_candidates
     print('long_match_percent: '+format(long_match_percent,'.3f'))
     with open('long_match_percent.txt', 'w+') as f:
         f.write(str(long_match_percent))
@@ -1356,11 +1350,24 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
             except IndexError:
                 continue
     relevant_history = list(reversed(relevant_history))
+    if len(relevant_history) < 1:
+        long_match_percent -= 0.01
+        if long_match_percent < 0.01:
+            long_match_percent = 0.01
+    elif len(relevant_history) > 100:
+        long_match_percent += 0.01
+        if long_match_percent > 0.99:
+            long_match_percent = 0.99
+    else:
+        pass
+    relevant_history2 = relevant_history[:max_contextual]
+    relevant_history = relevant_history2
     incorrect_commands_list = []
     counts_list = []
     for cmd, cnt in incorrect_commands.items():
         incorrect_commands_list.append(cmd)
         counts_list.append(cnt)
+    print(len(relevant_history))
     return relevant_history, incorrect_commands_list, counts_list, command_counts
 def check_phrase_in_file(new_phrase):
     """
@@ -2134,7 +2141,7 @@ DO NOT omit any keys from your JSON response. Always include:
         print('Same prompt so skipping gpt response')
         gpt_speed += 1
     else:
-        command_response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+        command_response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=15)
         response_json = command_response.json()
         if "choices" in response_json and "message" in response_json["choices"][0]:
             function_call_args = response_json["choices"][0]["message"].get("function_call", {}).get("arguments", {})
@@ -2520,6 +2527,8 @@ def handle_commands(
     else:
         remember_info_flag = 'false'
         remember_info_text = 'false'
+    with open('internal_input.txt', 'w+') as f:
+        f.write(remember_info_text)
     just_spoke = False
     try:
         if yolo_nav == True or yolo_find == True or yolo_look == True or follow_user == True:
@@ -3638,19 +3647,6 @@ def movement_loop():
                 time.sleep(0.1)
                 
                 continue
-
-            try:
-                with open('speech_comp.txt','r') as f:
-                    speech_comp = f.read()
-                
-                if speech_comp == 'true':
-                    time.sleep(0.1)
-                    print('transcribing speech')
-                    continue
-                else:
-                    pass
-            except:
-                pass
             try:
                 with open('speech_listen.txt','r') as f:
                     speech_listen = f.read()
@@ -3663,6 +3659,19 @@ def movement_loop():
                     pass
             except:
                 pass
+            try:
+                with open('speech_comp.txt','r') as f:
+                    speech_comp = f.read()
+                
+                if speech_comp == 'true':
+                    time.sleep(0.1)
+                    print('transcribing speech')
+                    continue
+                else:
+                    pass
+            except:
+                pass
+
             with open("last_phrase.txt","r") as f:
                 last_phrase = f.read()
             if b_gpt_sleep == True and 'echo' in last_phrase.lower().split(' '):
@@ -3726,18 +3735,6 @@ def movement_loop():
             if last_phrase == '*No Mic Input*':
                 while True:
                     try:
-                        with open('speech_comp.txt','r') as f:
-                            speech_comp = f.read()
-                        if speech_comp == 'true':
-                            print('Transcribing speech')
-                            time.sleep(0.1)
-                            continue
-                        else:
-                            break
-                    except:
-                        break
-                while True:
-                    try:
                         with open('speech_listen.txt','r') as f:
                             speech_listen = f.read()
                         if speech_listen == 'true':
@@ -3748,6 +3745,19 @@ def movement_loop():
                             break
                     except:
                         break
+                while True:
+                    try:
+                        with open('speech_comp.txt','r') as f:
+                            speech_comp = f.read()
+                        if speech_comp == 'true':
+                            print('Transcribing speech')
+                            time.sleep(0.1)
+                            continue
+                        else:
+                            break
+                    except:
+                        break
+
                 with open("last_phrase.txt","r") as f:
                     last_phrase = f.read()
                 if b_gpt_sleep == True and 'echo' in last_phrase.lower().split(' '):
