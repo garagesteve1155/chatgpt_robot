@@ -483,10 +483,7 @@ def process_audio_data(data_buffer, recognizer, sample_width, noise_profile):
                 else:
                     with open("last_phrase.txt","a") as f:
                         f.write(' ' + text)
-                with open("last_speaker.txt","w+") as f:
-                    f.write('Person')
-                with open("last_said.txt","w+") as f:
-                    f.write(text)
+
             else:
                 print("No transcribable text found.")
         except sr.UnknownValueError:
@@ -558,7 +555,7 @@ def listen_and_transcribe():
             if is_speech:
                 if speech_count == 0:
                     speech_frames = pre_speech_buffer.copy()
-                    with open('speech_comp.txt','w+') as f:
+                    with open('speech_listen.txt','w+') as f:
                         f.write('true')
                 speech_frames.append(frame)
                 non_speech_count = 0
@@ -569,7 +566,10 @@ def listen_and_transcribe():
                     speech_frames.append(frame)
                     if non_speech_count > post_speech_buffer:
                         if speech_count >= 30 and not is_transcribing:
-
+                            with open('speech_listen.txt','w+') as f:
+                                f.write('false')
+                            with open('speech_comp.txt','w+') as f:
+                                f.write('true')
                             process_audio_data(speech_frames, r, SAMPLE_WIDTH, noise_profile)
                             with open('speech_comp.txt','w+') as f:
                                 f.write('false')
@@ -577,6 +577,8 @@ def listen_and_transcribe():
                             non_speech_count = 0
                             speech_count = 0
                         else:
+                            with open('speech_listen.txt','w+') as f:
+                                f.write('false')
                             speech_frames = []
                             non_speech_count = 0
                             speech_count = 0
@@ -1573,6 +1575,10 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     
         with open('current_convo.txt','a') as f:
             f.write('\n'+name_of_person+' said: "'+phrase+'"')
+        with open("last_speaker.txt","w+") as f:
+            f.write(name_of_person)
+        with open("last_said.txt","w+") as f:
+            f.write(phrase)
         dynamic_data4 = dynamic_data4 + 'Mic Input From '+name_of_person+': '+phrase
     else:
         dynamic_data4 = dynamic_data4 + 'My Last Thought: '+internal_input
@@ -1898,6 +1904,8 @@ RULES FOR RESPONDING:
    - Do not describe the image or mention any objects you see unless explicitly asked about it via Mic Input.
 
 4. **Conversation Etiquette and Flow:**
+   - You must use natural realistic wording, for example do not greet people with phrases similar to "How can i assist you" or "What would you like to talk about" or anything similar to that. Say real stuff like "Whats up" or "hows it going dude" or something similar to that.
+   - You must be casual with what you say, like you are talking to a friend instead of a business client.
    - Do not ask a question in every response; converse naturally.
    - Pay attention to the “Current Conversation” at the bottom of the prompt. 
      - If Echo was the last to speak, wait for a response before speaking again.
@@ -2773,7 +2781,7 @@ def handle_commands(
         else:
             pass
         if speech_com in ['speak']:
-            with open("last_speaker.txt","w+") as f:
+            with open("last_speaker.txt","r") as f:
                 last_speaker = f.read()
             with open('playback_text.txt', 'r') as f:
                 p_text = f.read().strip()
@@ -3634,13 +3642,25 @@ def movement_loop():
             try:
                 with open('speech_comp.txt','r') as f:
                     speech_comp = f.read()
+                
+                if speech_comp == 'true':
+                    time.sleep(0.1)
+                    print('transcribing speech')
+                    continue
+                else:
+                    pass
+            except:
+                pass
+            try:
+                with open('speech_listen.txt','r') as f:
+                    speech_listen = f.read()
                     
-                    if speech_comp == 'true':
-                        time.sleep(0.1)
-                        print('transcribing speech')
-                        continue
-                    else:
-                        pass
+                if speech_listen == 'true':
+                    time.sleep(0.1)
+                    print('listening to potential speech')
+                    continue
+                else:
+                    pass
             except:
                 pass
             with open("last_phrase.txt","r") as f:
@@ -3708,12 +3728,24 @@ def movement_loop():
                     try:
                         with open('speech_comp.txt','r') as f:
                             speech_comp = f.read()
-                            if speech_comp == 'true':
-                                print('Transcribing speech')
-                                time.sleep(0.1)
-                                continue
-                            else:
-                                break
+                        if speech_comp == 'true':
+                            print('Transcribing speech')
+                            time.sleep(0.1)
+                            continue
+                        else:
+                            break
+                    except:
+                        break
+                while True:
+                    try:
+                        with open('speech_listen.txt','r') as f:
+                            speech_listen = f.read()
+                        if speech_listen == 'true':
+                            print('Listening to potential speech')
+                            time.sleep(0.1)
+                            continue
+                        else:
+                            break
                     except:
                         break
                 with open("last_phrase.txt","r") as f:
