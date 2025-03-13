@@ -13,3 +13,13 @@ Image Server Setup Instructions (DO THIS BEFORE RUNNING MAIN.PY ON YOUR ROBOT!):
 11. Use command "python3 image_server.py"
 
 This server is used to provide an image url to ChatGPT instead of the base64 image data like before. This saves A LOT of tokens (The server pays for itself very quick)
+
+
+
+## License
+This project is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
+
+**Personal/non-commercial use:** Free  
+**Commercial use/integration:** Requires explicit permission and licensing fee.  
+
+For commercial inquiries, contact: [makingmadeeasyllc@gmail.com](mailto:makingmadeeasyllc@gmail.com)
