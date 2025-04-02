@@ -23,7 +23,31 @@ import json
 from picamera2 import Picamera2, Preview
 import ast
 from collections import Counter
+with open('speech_listen.txt','w+') as f:
+    f.write('false')
+with open('just_met.txt','w+') as f:
+    f.write('false')
 camera = Picamera2()
+try:
+    with open('known_people.txt', 'r') as f:
+        reader = f.read()
+except:
+    with open('known_people.txt', 'w+') as f:
+        f.write('')
+directory = 'History'
+
+# Loop through all items in the directory
+for item in os.listdir(directory):
+    # Construct full path
+    item_path = os.path.join(directory, item)
+    
+    # Check if it's a file and has a .txt extension
+    if os.path.isfile(item_path) and item_path.endswith('.txt'):
+        # Delete the file
+        os.remove(item_path)
+        print(f'Deleted: {item_path}')
+
+print('All .txt files in the directory have been deleted.')
 def remove_duplicates(file_path):
     with open(file_path, 'r') as file:
         known_people = file.read().strip().lower()
@@ -37,8 +61,8 @@ remove_duplicates('known_people.txt')
 camera_config = camera.create_still_configuration()
 camera_config["controls"] = {
     "AeEnable": False,
-    "AnalogueGain": 3.5,
-    "ExposureTime": 100000,
+    "AnalogueGain": 8.0,
+    "ExposureTime": 50000,
     "AwbEnable": True,
 }
 camera.configure(camera_config)
@@ -67,40 +91,37 @@ class WebSocketUploader:
         self.port = port
         self.websocket = None
         self.connected = threading.Event()
-        self.lock = threading.Lock()
-        self.connect_thread = threading.Thread(target=self.connect)
+        self.loop = asyncio.new_event_loop()
+        self.connect_thread = threading.Thread(target=self.start_loop)
         self.connect_thread.start()
-    def connect(self):
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(self._connect_to_server())
-        except Exception as e:
-            print(traceback.format_exc())
+
+    def start_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_until_complete(self._connect_to_server())
+
     async def _connect_to_server(self):
         try:
             print(f"Connecting to WebSocket server at {self.vps_ip}:{self.port}...")
             async with websockets.connect(f"ws://{self.vps_ip}:{self.port}") as ws:
                 self.websocket = ws
                 self.connected.set()
-                print('Websocket connected')
+                print("WebSocket connected.")
                 while True:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(1)  # Keep the connection alive
         except Exception as e:
             print(traceback.format_exc())
+
     def send_image(self, image_path):
         if not self.connected.is_set():
             print("WebSocket connection not established.")
             return
+
         try:
             with open(image_path, "rb") as file:
                 image_data = file.read()
-            async def send():
-                start_time = time.time()
-                await self.websocket.send(image_data)
-                upload_duration = time.time() - start_time
-                print(f"Image sent successfully in {upload_duration:.3f} seconds.")
-            asyncio.run(send())
+
+            # Schedule the send task within the running event loop
+            asyncio.run_coroutine_threadsafe(self._send_image(image_data), self.loop)
         except Exception as e:
             print(f"Error sending image: {e}")
     def send_person_image(self, image_path, person_name):
@@ -120,6 +141,14 @@ class WebSocketUploader:
             asyncio.run(send())
         except Exception as e:
             print(f"Error sending image: {e}")
+    async def _send_image(self, image_data):
+        try:
+            start_time = time.time()
+            await self.websocket.send(image_data)
+            upload_duration = time.time() - start_time
+            print(f"Image sent successfully in {upload_duration:.3f} seconds.")
+        except Exception as e:
+            print(f"Error in _send_image: {e}")
 uploader = WebSocketUploader(vps_ip=server_ip, port=server_port)
 with open('recent_filenames.txt', 'w+') as f:
     f.write('')
@@ -213,6 +242,7 @@ folders_to_clear = [
     'People'
 ]
 time.sleep(2)
+"""
 deleter = input("Delete All Memories????? (Yes or No): ")
 if 'y' in deleter.lower():
     deleter2 = input("ARE YOU SURE YOU WANT TO Delete All Memories????? (Yes or No): ")
@@ -231,6 +261,7 @@ if 'y' in deleter.lower():
 else:
     pass
 time.sleep(2)
+"""
 def clear_pictures(folder_path):
     files = glob.glob(os.path.join(folder_path, '*'))
     for file in files:
@@ -366,7 +397,7 @@ def get_position_description(x, y, width, height):
     else:
         vertical = "below me and"
     if horizontal == "centered between my left and right" and vertical == "at my height":
-        return "centered on object"
+        return "directly center in front of me"
     else:
         return f"{vertical} {horizontal}"
 with open("last_phrase.txt","w+") as f:
@@ -470,7 +501,7 @@ def process_audio_data(data_buffer, recognizer, sample_width, noise_profile):
                 hop_length=512,
                 win_length=2048
             )
-            normalized_audio = normalize_full_audio(reduced_noise, target_dbfs=-20)
+            normalized_audio = normalize_full_audio(full_audio_data, target_dbfs=-10)
             audio = sr.AudioData(normalized_audio, RATE, sample_width)
             text = recognizer.recognize_google(audio)
             if text.strip().lower().replace(' ', '') != '':
@@ -544,7 +575,7 @@ def listen_and_transcribe():
     print("Audio stream opened for transcription.")
     speech_frames = []
     non_speech_count = 0
-    post_speech_buffer = 30
+    post_speech_buffer = 60
     speech_count = 0
     pre_speech_buffer = []
     while True:
@@ -566,7 +597,7 @@ def listen_and_transcribe():
                     non_speech_count += 1
                     speech_frames.append(frame)
                     if non_speech_count > post_speech_buffer:
-                        if speech_count >= 30 and not is_transcribing:
+                        if speech_count >= 20 and not is_transcribing:
                             with open('speech_listen.txt','w+') as f:
                                 f.write('false')
                             with open('speech_comp.txt','w+') as f:
@@ -595,6 +626,8 @@ def listen_and_transcribe():
     p.terminate()
 time.sleep(2)
 camera_vertical_pos = 'forward'
+grabber_vertical_pos = 'forward'
+grabber_state = 'open'
 last_time = time.time()
 _REG_CONFIG = 0x00
 _REG_SHUNTVOLTAGE = 0x01
@@ -846,86 +879,332 @@ def remove_overlapping_boxes(boxes, class_ids, confidences, overlap_threshold=0.
             final_class_ids.append(class_ids[i])
             final_confidences.append(confidences[i])
     return final_boxes, final_class_ids, final_confidences
-def process_high_d(start_time, boxes, class_ids, confidences, resize_img, center_x_min, center_y_min, center_x_max, center_y_max, center_grid_area, original_width, original_height):
+from sklearn.neighbors import KNeighborsClassifier
+
+# -----------------------------------------------------------------------------
+# 1. Setup: Load the ONNX Feature Extractor Model via OpenCV's DNN Module
+# -----------------------------------------------------------------------------
+# Make sure "mobilenetv2.onnx" exists in your working directory.
+feature_net = cv2.dnn.readNetFromONNX("mobilenetv2.onnx")
+
+# -----------------------------------------------------------------------------
+# 2. Preprocessing Helpers: Letterbox (Pad) and Prepare the Input
+# -----------------------------------------------------------------------------
+def letterbox_and_pad(img, desired_size=224):
+    """
+    Pads an image to a square while preserving its aspect ratio,
+    then resizes the square to the desired size.
+    """
+    h, w = img.shape[:2]
+    max_dim = max(h, w)
+    # Create a square canvas of the maximum dimension
+    if len(img.shape) == 2:  # Grayscale image
+        canvas = np.zeros((max_dim, max_dim), dtype=img.dtype)
+    else:
+        canvas = np.zeros((max_dim, max_dim, 3), dtype=img.dtype)
+    
+    # Compute offsets to center the ROI
+    x_offset = (max_dim - w) // 2
+    y_offset = (max_dim - h) // 2
+    if len(img.shape) == 2:
+        canvas[y_offset:y_offset+h, x_offset:x_offset+w] = img
+    else:
+        canvas[y_offset:y_offset+h, x_offset:x_offset+w] = img
+        
+    # Resize the square canvas to the desired size
+    resized = cv2.resize(canvas, (desired_size, desired_size), interpolation=cv2.INTER_AREA)
+    return resized
+
+def prepare_input(img, desired_size=224):
+    """
+    Prepares the ROI for the feature extractor:
+      - If grayscale, convert to 3-channel BGR.
+      - Letterbox the image to preserve its aspect ratio.
+      - Convert from BGR to RGB.
+      - Create a blob for the DNN.
+      
+    Adjust the scalefactor and mean values if needed based on your model.
+    """
+    # Convert grayscale to 3-channel if necessary.
+    if len(img.shape) == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    
+    # Letterbox/pad the image so that its aspect ratio is preserved.
+    img_square = letterbox_and_pad(img, desired_size)
+    
+    # Convert BGR -> RGB (if your ONNX model expects RGB)
+    img_rgb = cv2.cvtColor(img_square, cv2.COLOR_BGR2RGB)
+    
+    # Create a blob.
+    # Here we use scalefactor=1/127.5 and mean subtraction (127.5,127.5,127.5)
+    blob = cv2.dnn.blobFromImage(img_rgb, scalefactor=1.0/127.5, size=(desired_size, desired_size),
+                                 mean=(127.5, 127.5, 127.5), swapRB=False, crop=False)
+    return blob
+
+def extract_features(img):
+    """
+    Given an ROI (which may be non‑square and/or grayscale), preprocess it and
+    extract a feature vector using the ONNX model.
+    """
+    blob = prepare_input(img, desired_size=224)
+    feature_net.setInput(blob)
+    features = feature_net.forward()  # Expected shape: (1, N)
+    return features.flatten()
+
+# -----------------------------------------------------------------------------
+# 3. Build the Training Dataset and Train a KNN Classifier
+# -----------------------------------------------------------------------------
+def load_training_data():
+    """
+    Walks through the "known_people" directory (each subfolder is a person),
+    loads each image (which may be grayscale), extracts features using the ONNX model,
+    and builds a classifier training set.
+    """
+    embeddings_list = []
+    labels_list = []
+    label_map = {}
+    
+    data_dir = "known_people"
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    
+    people = os.listdir(data_dir)
+    if not people:
+        print("Warning: No subfolders found in 'known_people'.")
+    
+    for label_id, person in enumerate(people):
+        person_dir = os.path.join(data_dir, person)
+        label_map[label_id] = person
+        for image_file in os.listdir(person_dir):
+            if image_file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                image_path = os.path.join(person_dir, image_file)
+                # Use IMREAD_UNCHANGED to load grayscale or color images as-is.
+                img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+                if img is None:
+                    continue
+                feat = extract_features(img)
+                embeddings_list.append(feat)
+                labels_list.append(label_id)
+    
+    return np.array(embeddings_list), np.array(labels_list), label_map
+
+# Load the training embeddings and label mapping.
+embeddings_train, labels_train, label_map = load_training_data()
+
+# Train a KNN classifier if training data exists.
+if embeddings_train.size > 0:
+    knn = KNeighborsClassifier(n_neighbors=3)
+    knn.fit(embeddings_train, labels_train)
+else:
+    knn = None
+    print("No training embeddings found. The recognition system will return 'unknown'.")
+
+def recognize_person(roi):
+    """
+    Given a person ROI (face or full-body), extract its feature vector and compute
+    the distance between it and every training embedding. This prints the distance
+    for each known person (from the dataset) so you can see how far the detected ROI
+    is from each known person.
+    
+    Then, it also uses KNN (with 3 neighbors) to decide on a prediction, applying a
+    threshold to decide if the match is acceptable.
+    """
+    try:
+        # Extract feature from the ROI.
+        feat = extract_features(roi).reshape(1, -1)
+        if knn is None:
+            return "unknown", None
+
+        # Compute Euclidean distances from the feature to every training embedding.
+        # embeddings_train is assumed to be the numpy array of all training features.
+        all_distances = np.linalg.norm(embeddings_train - feat, axis=1)
+        
+        # Group these distances by label.
+        label_to_dists = {}
+        for i, dist in enumerate(all_distances):
+            label = labels_train[i]
+            if label in label_to_dists:
+                label_to_dists[label].append(dist)
+            else:
+                label_to_dists[label] = [dist]
+                
+        # Print out the distances for each known person.
+        for label, dists in label_to_dists.items():
+            avg_dist = np.mean(dists)
+            min_dist = np.min(dists)
+            print("Name:", label_map[label], "| Avg Distance:", avg_dist, "| Min Distance:", min_dist)
+        
+        # Now use the KNN classifier for a prediction with 3 neighbors.
+        predicted_label = knn.predict(feat)[0]
+        distances, _ = knn.kneighbors(feat, n_neighbors=3)
+        avg_knn_distance = np.mean(distances)
+        print("KNN predicted label:", label_map[predicted_label])
+        print("KNN avg distance:", avg_knn_distance)
+        
+        # Tune this threshold based on your data (here, we use 50 as an example).
+        threshold = 50.0
+        if avg_knn_distance > threshold:
+            return "unknown", avg_knn_distance
+        else:
+            return label_map.get(predicted_label, "unknown"), avg_knn_distance
+    except Exception as e:
+        print(traceback.format_exc())
+        return "unknown", None
+
+
+# -----------------------------------------------------------------------------
+# 4. Convert process_high_d() to Use the New Recognition System
+# -----------------------------------------------------------------------------
+def process_high_d(start_time, boxes, class_ids, confidences, resize_img,
+                   center_x_min, center_y_min, center_x_max, center_y_max, center_grid_area,
+                   original_width, original_height):
     upload_people = False
+    high_descriptions = []
+    color = (0, 255, 0)
+
     try:
         now = datetime.now()
         the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-        high_descriptions = []
-        color = (0, 255, 0)
+
+        # Read current distance from file
         with open('current_distance.txt', 'r') as f:
             distance = float(f.read()) / 100.0
+
+        # Clear all images in Current_people directory
+        clear_pictures('Current_people')
+
+        count = 0
         for i, (x, y, w, h) in enumerate(boxes):
             label = str(classes[class_ids[i]]).lower().strip()
             confid = str(confidences[i])
-            color = (0, 255, 0)
+
             if label == 'person':
+                # Expand the bounding box
                 expansion = 0.15
                 delta_w = int(w * expansion / 2)
                 delta_h = int(h * expansion / 2)
-                new_x = max(0, x - delta_w)
-                new_y = max(0, y - delta_h)
-                new_w = w + 2 * delta_w
-                new_h = h + 2 * delta_h
-                new_w = min(new_w, resize_img.shape[1] - new_x)
-                new_h = min(new_h, resize_img.shape[0] - new_y)
-                cv2.rectangle(resize_img, (new_x, new_y), (new_x + new_w, new_y + new_h), color, 2)
-                label_position = (new_x, new_y - 10) if new_y - 10 > 10 else (new_x, new_y + new_h + 10)
-            else:
+                x = max(0, x - delta_w)
+                y = max(0, y - delta_h)
+                w = w + 2 * delta_w
+                h = h + 2 * delta_h
+                w = min(w, resize_img.shape[1] - x)
+                h = min(h, resize_img.shape[0] - y)
+
+                # Draw the rectangle on the person
                 cv2.rectangle(resize_img, (x, y), (x + w, y + h), color, 2)
                 label_position = (x, y - 10) if y - 10 > 10 else (x, y + h + 10)
-            box_x_min, box_y_min = x, y
-            box_x_max, box_y_max = x + w, y + h
-            inter_x_min = max(box_x_min, center_x_min)
-            inter_y_min = max(box_y_min, center_y_min)
-            inter_x_max = min(box_x_max, center_x_max)
-            inter_y_max = min(box_y_max, center_y_max)
-            inter_area = max(0, inter_x_max - inter_x_min) * max(0, inter_y_max - inter_y_min)
-            percentage_covered = (inter_area / (w * h)) * 100
-            if percentage_covered > 50:
-                distance1 = distance
-            else:
-                distance1 = 'None'
-            cv2.putText(resize_img, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-            pos_desc = get_position_description(x + w / 2, y + h / 2, original_width, original_height)
-            if label == 'person':
+
+                # Extract the person ROI
                 person_roi = resize_img[y:y + h, x:x + w]
-                gray_roi = cv2.cvtColor(person_roi, cv2.COLOR_BGR2GRAY)
-                faces = face_cascade.detectMultiScale(
-                    gray_roi,
-                    scaleFactor=1.07,
-                    minNeighbors=4,
-                    minSize=(10, 10)
-                )
-                for (fx, fy, fw, fh) in faces:
-                    cv2.rectangle(resize_img,
-                                  (x + fx, y + fy),
-                                  (x + fx + fw, y + fy + fh),
-                                  (0, 255, 255), 2)
+                with open('name_of_person.txt', 'r') as f:
+                    person_name = f.read().strip().lower()
+                with open('output.txt', 'r') as file:
+                    yolo_detections = file.read()
+                person_name = person_name.replace(' name of person','')
+                # Use the new ONNX-based recognition system.
+                recognized_name, dist = recognize_person(person_roi)
+                print("Recognized:", recognized_name, "Distance:", dist)
+                # Save the current ROI if recognized
+                if recognized_name != "unknown":
+                    try:
+                        label = recognized_name
+                        person_dir = os.path.join("known_people", recognized_name)
+                        if not os.path.exists(person_dir):
+                            os.makedirs(person_dir)
+                        # Save a grayscale version (as in your original code)
+                        gray_roi = cv2.cvtColor(person_roi, cv2.COLOR_BGR2GRAY)
+                        image_path = os.path.join(person_dir, f"{now.strftime('%Y-%m-%d_%H-%M-%S')}_body.jpg")
+                        cv2.imwrite(image_path, person_roi)
+                        print("Saved person roi at "+person_dir)
+                        if person_name != "unknown" and person_name != recognized_name:
+                            try:
+                                person_dir = os.path.join("known_people", person_name)
+                                if not os.path.exists(person_dir):
+                                    os.makedirs(person_dir)
+                                image_path = os.path.join(person_dir, f"{now.strftime('%Y-%m-%d_%H-%M-%S')}_body.jpg")
+                                cv2.imwrite(image_path, person_roi)
+                                print("Saved person roi at "+person_dir)
+                            except:
+                                print(traceback.format_exc())                    
+                        else:
+                            pass
+                    except:
+                        print(traceback.format_exc())
+                        
+                else:
+                    gray_roi = cv2.cvtColor(person_roi, cv2.COLOR_BGR2GRAY)
+                    label = 'unknown person'
+                # Create a position description (assumes get_position_description() is defined)
+                try:
+                    pos_desc = get_position_description(x + w / 2, y + h / 2, original_width, original_height)
+                except:
+                    print(traceback.format_exc())
+                    pos_desc = ""
+                    
+                # Detect faces within the person region using your Haar cascade
+                faces = face_cascade.detectMultiScale(gray_roi, scaleFactor=1.04, minNeighbors=3, minSize=(7, 7))
+                if len(faces) > 0:
+                    for (fx, fy, fw, fh) in faces:
+                        face_roi = person_roi[fy:fy + fh, fx:fx + fw]
+                        gray_face_roi = gray_roi[fy:fy + fh, fx:fx + fw]
+                        # Save face images for the recognized person
+                        if recognized_name != "unknown":
+                            face_dir = os.path.join("known_people", recognized_name)
+                            if not os.path.exists(face_dir):
+                                os.makedirs(face_dir)
+                            face_image_path = os.path.join(face_dir, f"{now.strftime('%Y-%m-%d_%H-%M-%S')}_face.jpg")
+                            cv2.imwrite(face_image_path, face_roi)
+                            print(f"Saved face image for {recognized_name} at {face_image_path}")
                 gaze = "looking at me." if len(faces) >= 1 else "not looking at me."
-                if distance1 != "None":
-                    description = f"{label} {pos_desc} about {distance1:.2f} meters away and they are {gaze}"
+                if recognized_name != "unknown":
+                    if distance is not None:
+                        description = f"- Recognized a person I know named {recognized_name} {pos_desc}, about {distance:.2f} meters away and they are {gaze}"
+                    else:
+                        description = f"- Recognized a person I know named {recognized_name} {pos_desc} and they are {gaze}"
                 else:
-                    description = f"{label} {pos_desc} and they are {gaze}"
+                    if distance is not None:
+                        description = f"- There is an unknown person {pos_desc}, about {distance:.2f} meters away and they are {gaze}"
+                    else:
+                        description = f"- There is an unknown person {pos_desc} and they are {gaze}"
+
+                high_descriptions.append(description)
+                save_label = label.replace(' ','_')
+                # Save the current person image
+                cv2.imwrite(f"Current_people/{save_label}{count}.jpg", person_roi)
+                count += 1
+
             else:
-                if distance1 != "None":
-                    description = f"{label} {pos_desc} about {distance1:.2f} meters away."
+                try:
+                    pos_desc = get_position_description(x + w / 2, y + h / 2, original_width, original_height)
+                except:
+                    print(traceback.format_exc())
+                    pos_desc = ""
+                cv2.rectangle(resize_img, (x, y), (x + w, y + h), color, 2)
+                label_position = (x, y - 10) if y - 10 > 10 else (x, y + h + 10)
+                if distance is not None:
+                    description = f"- There is a {label} {pos_desc}, about {distance:.2f} meters away."
                 else:
-                    description = f"{label} {pos_desc}"
-            high_descriptions.append(description)
-        end_haar = time.time()
+                    description = f"- There is a {label} {pos_desc}"
+                high_descriptions.append(description)
+
+            cv2.putText(resize_img, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+        # Save the annotated output images
         cv2.imwrite('Pictures/' + str(the_time).replace('.', '-').replace(' ', '_') + '.jpg', resize_img)
         cv2.imwrite("output1.jpg", resize_img)
-    except:
+
+    except Exception as e:
         print(traceback.format_exc())
+
     return high_descriptions, upload_people
+
+# -----------------------------------------------------------------------------
+# 5. The YOLO Detection Function (mostly unchanged)
+# -----------------------------------------------------------------------------
 def yolo_detect(b_sleep, s_count, words, nav, look, follow, find):
-    global net
-    global output_layers
-    global classes
-    global camera
+    global net, output_layers, classes, camera
     try:
-        yolo_start = time.time()
+        yolo_start = cv2.getTickCount()
         img = camera.capture_array()
         h, w = img.shape[:2]
         size = max(h, w)
@@ -936,21 +1215,22 @@ def yolo_detect(b_sleep, s_count, words, nav, look, follow, find):
         square_img = cv2.copyMakeBorder(img, top, bottom, left, right,
                                         cv2.BORDER_CONSTANT, value=[0, 0, 0])
         local_image_path = "output1.jpg"
-        resized_img = cv2.resize(square_img, (416, 416), interpolation=cv2.INTER_AREA)
+        resized_img = cv2.resize(square_img, (512, 512), interpolation=cv2.INTER_AREA)
         original_height, original_width, _ = resized_img.shape
         remote_filename = local_image_path
-        yolo_start1 = time.time()
+
         gray_img = cv2.cvtColor(resized_img, cv2.COLOR_BGR2GRAY)
         brightness = np.mean(gray_img)
         if brightness < 15:
-            bright = "It is really dark here. I should absolutely not speak so I don't disturb anyone, and I should also to go to sleep."
+            bright = "It is really dark here. I should absolutely not speak so I don't disturb anyone, and I should also go to sleep."
         elif brightness >= 15 and brightness < 30:
             bright = "It is pretty dim here, I should be cautious about speaking so I don't disturb anyone."
         else:
             bright = "It is a normal brightness here. The lights are on or it is day time."
-        if 0 == 0 or nav == True or look == True or follow == True or find == True:
+
+        if nav or look or follow or find or (0 == 0):
             height, width, channels = resized_img.shape
-            blob = cv2.dnn.blobFromImage(resized_img, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
+            blob = cv2.dnn.blobFromImage(resized_img, 0.00392, (512, 512), (0, 0, 0), True, crop=False)
             net.setInput(blob)
             outs = net.forward(output_layers)
             class_ids = []
@@ -965,22 +1245,21 @@ def yolo_detect(b_sleep, s_count, words, nav, look, follow, find):
                         if confidence > 0.39:
                             center_x = int(detection[0] * width)
                             center_y = int(detection[1] * height)
-                            w = int(detection[2] * width)
-                            h = int(detection[3] * height)
-                            x = int(center_x - w / 2)
-                            y = int(center_y - h / 2)
-                            boxes.append([x, y, w, h])
+                            w_box = int(detection[2] * width)
+                            h_box = int(detection[3] * height)
+                            x_box = int(center_x - w_box / 2)
+                            y_box = int(center_y - h_box / 2)
+                            boxes.append([x_box, y_box, w_box, h_box])
                             confidences.append(float(confidence))
                             class_ids.append(class_id)
-                        else:
-                            pass
             except:
                 print(traceback.format_exc())
+
             boxes, class_ids, confidences = remove_overlapping_boxes(boxes, class_ids, confidences, 0.5)
-            center_x_min = 2 * 416 / 5
-            center_x_max = 3 * 416 / 5
-            center_y_min = 416 / 3
-            center_y_max = 2 * 416 / 3
+            center_x_min = 2 * 512 / 5
+            center_x_max = 3 * 512 / 5
+            center_y_min = 512 / 3
+            center_y_max = 2 * 512 / 3
             center_grid_area = (center_x_max - center_x_min) * (center_y_max - center_y_min)
             if class_ids:
                 labels = [str(classes[class_id]).lower() for class_id in class_ids]
@@ -992,28 +1271,31 @@ def yolo_detect(b_sleep, s_count, words, nav, look, follow, find):
                     file.write('')
                 labels = []
                 labels_string = ''
-            start_haar = time.time()
-            descriptions, upload_peeps = process_high_d(start_haar, boxes, class_ids, confidences, resized_img, center_x_min, center_y_min, center_x_max, center_y_max, center_grid_area, 416, 416)
+
+            descriptions, upload_peeps = process_high_d(cv2.getTickCount(), boxes, class_ids, confidences,
+                                                         resized_img, center_x_min, center_y_min,
+                                                         center_x_max, center_y_max, center_grid_area,
+                                                         512, 512)
             with open("output.txt", "w+") as file:
                 file.write('\n'.join(descriptions))
-            if b_sleep == False and nav == False and look == False and follow == False and find == False:
+
+            if not (b_sleep or nav or look or follow or find):
                 try:
                     uploader.send_image(local_image_path)
                 except:
                     print(traceback.format_exc())
-                if upload_peeps == True:
-                    pass
-                else:
-                    pass
-            else:
-                pass
+            # (Else: skip uploading)
+
         else:
             pass
+
         with open("brightness.txt", "w+") as file:
             file.write(bright)
         return brightness
+
     except Exception as e:
         print(traceback.format_exc())
+        import time
         time.sleep(60)
         return 1000
 def manage_rules(new_rule, h_file1, h_file2, h_file3, h_file4, h_file5, h_file6, h_file7, h_file8, h_file9, h_file10, file_n):
@@ -1085,7 +1367,7 @@ def parse_filename(file_path):
     except ValueError:
         return None, []
 def get_recent_history():
-    max_recent = 15
+    max_recent = 50
     history_folder = 'History'
     history_all = []
     for file in os.listdir(history_folder):
@@ -1200,7 +1482,7 @@ Here is the conversation so far (Oldest at the top, newest at the bottom):
 {convo}
 
 If Echo should still speak, then respond with only the word SPEAK.
-If Echo should stay silent and wait for a response to what it said previously, then respond with only the word WAIT."""
+If Echo should stay silent and wait for a response to what it said previously, then respond with only the word WAIT, followed by ~~ followed by the reason for waiting."""
     payload = {
         "model": "gpt-4o-mini",
         "messages": [
@@ -1251,6 +1533,14 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
                 if file.endswith('.txt')
             ]
             all_files.extend(person_files)
+    subcat_path = 'History'
+    if os.path.isdir(subcat_path):
+        subcat_files = [
+            os.path.join(subcat_path, file)
+            for file in os.listdir(subcat_path)
+            if file.endswith('.txt')
+        ]
+        all_files.extend(subcat_files)
     file_info = []
     for file in all_files:
         timestamp, keywords = parse_filename(file)
@@ -1266,16 +1556,10 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
             
             contextual_candidates.append((timestamp, file_path, matched_count))
             long_matches += 1
-    print("LENGTHS:")
-    print(len(all_files))
-    print(len(file_info))
-    print(len(sorted_files))
-    print(len(contextual_candidates))
+
     contextual_candidates.sort(key=lambda x: (x[2], x[0]), reverse=True)
     top_candidates = contextual_candidates
-    print('long_match_percent: '+format(long_match_percent,'.3f'))
-    with open('long_match_percent.txt', 'w+') as f:
-        f.write(str(long_match_percent))
+
     message_info = {}
     command_counts = {}
     for candidate in top_candidates:
@@ -1300,12 +1584,14 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
                 continue
         except ValueError:
             continue
+        
+        # Store each message as a separate entry with updated counts
         if message not in message_info:
             message_info[message] = {
                 'count': 1,
                 'matched_words': matched_words,
                 'timestamp': candidate_timestamp,
-                'file_path': file_path
+                'file_path': [file_path]  # Store file paths as a list for multiple occurrences
             }
         else:
             message_info[message]['count'] += 1
@@ -1313,7 +1599,8 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
                 message_info[message]['matched_words'] = matched_words
             if candidate_timestamp < message_info[message]['timestamp']:
                 message_info[message]['timestamp'] = candidate_timestamp
-                message_info[message]['file_path'] = file_path
+            message_info[message]['file_path'].append(file_path)  # Append to file path list
+
         try:
             response_content = response.split('~~')[0].strip()
         except IndexError:
@@ -1323,43 +1610,51 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
         command_counts[response_content]['total'] += 1
         if incorrect_response:
             command_counts[response_content]['incorrect'] += 1
+
     sorted_message_info = sorted(
         message_info.items(),
         key=lambda x: (-x[1]['matched_words'], x[1]['timestamp'])
     )
+ 
+
     relevant_history = []
     incorrect_commands = {}
     for message, info in sorted_message_info:
         count = info['count']
-        try:
-            with open(info['file_path'], 'r') as f:
-                content = f.read().strip()
-        except Exception:
-            content = message
-        if "PROMPT:" in content and "RESPONSE:" in content:
-            relevant_history.append(content)
-        if '(INCORRECT RESPONSE)' in content:
+        for file_path in info['file_path']:  # Iterate through all file paths
             try:
-                response_part = content.split('RESPONSE: ', 1)[1]
-                command = response_part.split(' (INCORRECT RESPONSE)')[0].strip()
-                base_cmd = command.split('~~')[0].strip()
-                if base_cmd in incorrect_commands:
-                    incorrect_commands[base_cmd] += 1
-                else:
-                    incorrect_commands[base_cmd] = 1
-            except IndexError:
-                continue
+                with open(file_path, 'r') as f:
+                    content = f.read().strip()
+            except Exception:
+                content = message
+            if "PROMPT:" in content and "RESPONSE:" in content:
+                relevant_history.append(content)
+                if '(INCORRECT RESPONSE)' in content:
+                    try:
+                        response_part = content.split('RESPONSE: ', 1)[1]
+                        command = response_part.split(' (INCORRECT RESPONSE)')[0].strip()
+                        base_cmd = command.split('~~')[0].strip()
+                        if base_cmd in incorrect_commands:
+                            incorrect_commands[base_cmd] += 1
+                        else:
+                            incorrect_commands[base_cmd] = 1
+                    except IndexError:
+                        continue
+    
     relevant_history = list(reversed(relevant_history))
-    if len(relevant_history) < 1:
+
+    if len(contextual_candidates) < 1:
         long_match_percent -= 0.01
         if long_match_percent < 0.01:
             long_match_percent = 0.01
-    elif len(relevant_history) > 100:
+    elif len(contextual_candidates) > 100:
         long_match_percent += 0.01
         if long_match_percent > 0.99:
             long_match_percent = 0.99
     else:
         pass
+    with open('long_match_percent.txt', 'w+') as f:
+        f.write(str(long_match_percent))
     relevant_history2 = relevant_history[:max_contextual]
     relevant_history = relevant_history2
     incorrect_commands_list = []
@@ -1367,7 +1662,6 @@ def get_relevant_history(subcategories, description, already_used, c_his, c_prom
     for cmd, cnt in incorrect_commands.items():
         incorrect_commands_list.append(cmd)
         counts_list.append(cnt)
-    print(len(relevant_history))
     return relevant_history, incorrect_commands_list, counts_list, command_counts
 def check_phrase_in_file(new_phrase):
     """
@@ -1481,6 +1775,7 @@ def maintain_history_folder():
     except Exception as e:
         print(f"Error maintaining history folder: {e}")
 maintain_history_folder()
+
 def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     entire_command = ''
     dynamic_data2 = ''
@@ -1524,16 +1819,17 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         current_distance = float(file.read())
     with open("name_of_person.txt","r") as f:
         name_of_person = f.read()
-    if name_of_person == 'unknown name of person':
-        include_people = True
-    else:
-        include_people = False
+
     with open('session_start.txt', 'r') as f:
         session_start = f.read()
     with open("move_failed.txt","r") as f:
         move_failed = f.read()
     with open('move_failure_reas.txt', 'r') as f:
         move_failure_reas = f.read()
+    with open("speech_failed.txt","r") as f:
+        speech_failed = f.read()
+    with open('speech_failure_reas.txt', 'r') as f:
+        speech_failure_reas = f.read()
     try:
         with open("summaries.txt","r") as f:
             last_10_sessions = f.read()
@@ -1567,6 +1863,11 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     recent_history, files_in = get_recent_history()
     recent_amount = str(len(recent_history))
     recent_chat, next_files_in = get_recent_chat()
+
+    if name_of_person == 'unknown name of person':
+        include_people = True
+    else:
+        include_people = False
     chat_amount = len(recent_chat)
     if chat_amount > 0 or phrase != '*No Mic Input*':
         if last_s == "Echo":
@@ -1591,8 +1892,8 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         dynamic_data4 = dynamic_data4 + 'My Last Thought: '+internal_input
     with open('current_convo.txt', 'r') as f:
         all_lines = f.readlines()
-    last_10_messages = all_lines[-50:]
-    current_convo = ''.join(last_10_messages)
+    last_10_messages = all_lines[-100:]
+    current_convo = '\n- '.join(last_10_messages).replace('\n\n','\n')
     dynamic_data4 = dynamic_data4 + ' - '+responder+' - Task: '+task
     dynamic_data4 = dynamic_data4 + ' - Battery Level: '+str(int(percent))+'%'
     if on_charger == True:
@@ -1602,6 +1903,10 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     dynamic_data4 = dynamic_data4 + ' - '+sleep_now
     if move_failure != '':
         dynamic_data4 = dynamic_data4 + ' - MY LAST MOVE FAILED: '+ move_failure
+    else:
+        pass
+    if speech_failure_reas != '':
+        dynamic_data4 = dynamic_data4 + ' - I incorrectly tried to speak: '+ speech_failure_reas
     else:
         pass
     dynamic_data4 = dynamic_data4 + ' - '+ brightn
@@ -1616,17 +1921,21 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         name_of_person = 'unknown name of person'
     else:
         pass
-
+    if name_of_person == 'unknown name of person':
+        name_of_person_p = 'unknown name of person (I need to ask for their name or use the name of the known person from the yolo detections, if it says there is a known person)'
+    else:
+        name_of_person_p = name_of_person
     current_data = 'Session Started: '+ session_start+'\nCurrent: '+str(the_time)
     current_data_m = ''
     current_data2 = str(the_time)
     if phrase != '*No Mic Input*':
-        current_data = current_data+'\n\nCURRENT DATA:\n- Current Person (If the name of the person is unknown, I should ask their name if I am in a conversation): '+name_of_person+'\n- Mic Input From "'+name_of_person+'": '+phrase
-        current_data_m = current_data_m+'\n\nCURRENT DATA:\n- Current Person (If the name of the person is unknown, I should ask their name if I am in a conversation): '+name_of_person+'\n- Mic Input From "'+name_of_person+'": '+phrase
-        current_data2 = current_data2+' - Mic From '+name_of_person+': ' + phrase
+        current_data = current_data+'\n\nCURRENT DATA:\n- Current Person (If the name of the person is unknown, I should ask their name if I am in a conversation): '+name_of_person_p+'\n- Mic Input From "'+name_of_person_p+'": '+phrase
+        current_data_m = current_data_m+'\n\nCURRENT DATA:\n- Current Person (If the name of the person is unknown, I should ask their name if I am in a conversation): '+name_of_person_p+'\n- Mic Input From "'+name_of_person_p+'": '+phrase
+        current_data2 = current_data2+' - Mic From '+name_of_person+' (Their name might be in the Yolo Detections if it says unknown here): ' + phrase
     else:
         current_data = current_data+'\n- My Last Thought: '+internal_input
         current_data_m = current_data_m+'\n- My Last Thought: '+internal_input
+        current_data2 = current_data2+'\n- My Last Thought: '+internal_input
     if move_failure != '':
         current_data = current_data + '\n- MY LAST MOVE FAILED:\n- '+ move_failure
         current_data2 = current_data2 + ' - ' + move_failure
@@ -1650,8 +1959,9 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     current_data = current_data + '\n- '+ brightn
     current_data_m = current_data_m + '\n- '+ brightn
     if yolo_detections != '':
-        current_data = current_data + "\n"+yolo_detections
-        current_data_m = current_data_m + "\n"+yolo_detections
+        current_data = current_data + "\nCurrent YOLO Detections:\n"+yolo_detections+"\nEND OF YOLO"
+        current_data_m = current_data_m + "\nCurrent YOLO Detections:\n"+yolo_detections+"\nEND OF YOLO"
+        current_data2 = current_data2 + " - YOLO Detections: "+yolo_detections.replace('\n',' | ')+" - END OF YOLO"
     else:
         pass
     current_data = current_data + '\n- Battery Level: '+str(int(percent))+'%'
@@ -1664,8 +1974,8 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     else:
         pass
     last_10 = 'Summaries of previous 10 sessions before this current session (NOT PART OF THE CURRENT CONVERSATION UNLESS EXPLICITLY REFERENCED!):\n- '+last_10_sessions
-    current_data = current_data + '\n\nCURRENT CONVERSATION (Most recent at bottom of list. YOU ARE ECHO!):\n'+current_convo
-    current_data_m = current_data_m + '\n\nCURRENT CONVERSATION (Most recent at bottom of list. YOU ARE ECHO!):\n'+current_convo
+    current_data = current_data + '\n\nCURRENT CONVERSATION (Most recent at bottom of list. YOU ARE ECHO! IT IS CRUCIAL TO PAY ATTENTION TO THE CURRENT CONVERSATION DATA BELOW):\n- '+current_convo
+    current_data_m = current_data_m + '\n\nCURRENT CONVERSATION (Most recent at bottom of list. YOU ARE ECHO! IT IS CRUCIAL TO PAY ATTENTION TO THE CURRENT CONVERSATION DATA BELOW):\n- '+current_convo
     if dynamic_data4 == '' or char_difference(current_data_m.strip(), last_prompt.strip()):
         prompt_subcategory = []
         prompt_description = []
@@ -1702,7 +2012,6 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         mental_commands_counters = {
             "Set Name Of Person": Counter(),
             "Set Current Task": Counter(),
-            "Save Image Of Person": Counter(),
             "Remember Information": Counter()
         }
         
@@ -1789,14 +2098,71 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         }
         
         return rough_draft
+    def filter_correct_responses(relevant_history):
+        """
+        Filters out any responses marked with "(INCORRECT RESPONSE)".
+        
+        Args:
+            relevant_history (list): List of memory strings.
+        
+        Returns:
+            list: Filtered list containing only correct responses.
+        """
+        correct_responses = []
+        for memory in relevant_history:
+            if "(INCORRECT RESPONSE)" not in memory:
+                correct_responses.append(memory)
+        return correct_responses
 
-    # --------------
-    # Example usage:
-    # relevant_history = [...] # your list of memory strings
-    rough_draft_json = build_rough_draft_from_history(relevant_history)
+    def find_dominant_response(filtered_history, threshold):
+        """
+        Identifies if any single response dominates the filtered history based on the given threshold.
 
-    print("Consolidated Rough Draft JSON:")
-    print(rough_draft_json)
+        Args:
+            filtered_history (list): List of memory strings.
+            threshold (float): Percentage threshold to determine dominance.
+
+        Returns:
+            dict or None: The dominant response as a dictionary if found, else None.
+        """
+        response_counter = Counter()
+        
+        for memory in filtered_history:
+            try:
+                # Extract the JSON response from the memory
+                lines = memory.split('\n')
+                response_line = next(line for line in lines if line.startswith("RESPONSE: "))
+                response_data_str = response_line.split("RESPONSE: ", 1)[1].strip()
+                
+                # Safely parse the string as a dictionary
+                response_dict = ast.literal_eval(response_data_str)
+                
+                # Convert dict to a JSON string for counting
+                response_json_str = json.dumps(response_dict, sort_keys=True)
+                response_counter[response_json_str] += 1
+            except (StopIteration, ValueError, SyntaxError):
+                continue  # Skip malformed entries
+
+        if not response_counter:
+            return None
+
+        most_common_response, count = response_counter.most_common(1)[0]
+        percentage = (count / len(filtered_history)) * 100
+
+        if percentage >= threshold:
+            # Convert back to dictionary
+            dominant_response = json.loads(most_common_response)
+            return dominant_response
+        else:
+            return None
+    filtered_relevant_history = filter_correct_responses(relevant_history)
+    dom_res = find_dominant_response(filtered_relevant_history, 50)
+    if dom_res == None or len(filtered_relevant_history) < 25:
+        rough_draft_json = build_rough_draft_from_history(relevant_history)
+        skip_gpt = False
+    else:
+        rough_draft_json = dom_res
+        skip_gpt = True
             
             
             
@@ -1804,6 +2170,10 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     remembered_info_list = []
     for memory in relevant_history:
         try:
+            if "(INCORRECT RESPONSE)" in memory:
+                continue
+            else:
+                pass
             lines = memory.split('\n')
             response_line = next(line for line in lines if line.startswith('RESPONSE: '))
             response_data = response_line.split('RESPONSE: ', 1)[1].strip()
@@ -1822,7 +2192,7 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     if remembered_info_list != []:
         # Join remembered items with a dash for display
         remembered_info = '\n- '.join(remembered_info_list)
-        remembered_info = 'Contextually Relevant Remembered Information From Past Sessions (Long Term Memories):\n- '+remembered_info
+        remembered_info = 'Remembered Information From Previous Sessions:\n- '+remembered_info
     else:
         remembered_info = "I cant think of any long term memories that I have from a similar situation to the present, so this situation must be a new experience for me."
     current_history = recent_history
@@ -1835,7 +2205,7 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         current_history,
         key=lambda entry: extract_timestamp(entry) or datetime.min
     )
-    print('Relevant Pairs: ' + str(len(relevant_history)))
+    print('\nRelevant Pairs: ' + str(len(relevant_history)))
     print('Recent Pairs: ' + str(len(recent_history)))
     physical_output_commands = [
         "Move Forward One Inch",
@@ -1846,7 +2216,11 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         "Turn Right 15 Degrees",
         "Turn Right 45 Degrees",
         "Raise Camera Angle",
-        "Lower Camera Angle"
+        "Lower Camera Angle",
+        "Raise Grabber",
+        "Lower Grabber",
+        "Open Grabber",
+        "Close Grabber"
     ]
     speech_commands = [
         "Speak ~~ <what you want to say>"
@@ -1856,12 +2230,12 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
         "Navigate To Specific Yolo Object ~~ <object name>",
         "Center Camera On Specific Yolo Object ~~ <object name>",
         "Find Unseen Yolo Object ~~ <object name>",
+        "Align With And Pick Up Yolo Object ~~ <object name>",
         "Go To Sleep"
     ]
     mental_commands = [
         "Set Name Of Person ~~ <name>",
         "Set Current Task ~~ <task>",
-        "Save Image Of Person",
         "Remember Information ~~ <info>"
     ]
     """
@@ -1883,7 +2257,7 @@ def send_text_to_gpt4_move(percent, current_distance1, phrase, gpt_speed):
     speech_commands_str = '\n- '.join(speech_commands)
     mode_commands_str = '\n- '.join(mode_commands)
     mental_commands_str = '\n- '.join(mental_commands)
-    system_message = """You are Echo, and your physical form is a 4-wheeled mobile RPi and Arduino robot that is controlled from your command choice in your responses.
+    system_message = f"""You are Echo, and your physical form is a 4-wheeled mobile RPi and Arduino robot that is controlled from your command choice in your responses.
 
 The included image URL is your current view from the camera. 
 - Use this image only for visual context, and only when specifically needed. 
@@ -1892,6 +2266,7 @@ The included image URL is your current view from the camera.
 Session History and Roles:
 - The 'user' session history role contains all of your robotic data (sensors, camera, internal thoughts, memories, and knowledge).
 - The 'assistant' session history role contains your responses with the commands you chose at that time.
+- Use the list of previous session summaries as context for the current situation.
 
 Image Usage:
 - The image URL in the prompt payload shows what you currently see from your camera.
@@ -1899,11 +2274,12 @@ Image Usage:
 
 ------
 RULES FOR RESPONDING:
-1. **Ask for the person's name at the start of the conversation, even if you are talking about something else. It is absolutely crucial to ask for the person's name!!!**  
-   - If you don’t know the name of the person you are speaking with, ask for it, even if you are responding to other stuff.
+1. **Ask for the person's name at the start of the conversation, even if you are talking about something else. It is absolutely crucial to ask for the person's name unless it says you know their name within the yolo detections, then Set that as their name instead!**  
+   - If you don’t know the name of the person you are speaking with, ask for it unless it says you know their name within the yolo detections, then Set that as their name instead!
 
 2. **You are Echo!**  
    - You decide what Echo says and must ensure Echo follows the flow of conversation with correct command choices.
+   - Do not include a question within every response. Vary up what echo says between statements, exclamations, and questions, while keep the conversation natural like a human.
 
 3. **Focus and Restrictions on Visuals:**
    - Do not speak about what you see unless explicitly asked.
@@ -1918,7 +2294,11 @@ RULES FOR RESPONDING:
      - If Echo was the last to speak, wait for a response before speaking again.
      - Avoid repeating yourself.
    - Do not speak multiple times in a row without the person replying.
-   - If the current person is "unknown" or "unknown name of person", then ask for their name, even if you are responding to other stuff.
+   - If the current person is "unknown" or "unknown name of person", then ask for their name, even if you are responding to other stuff,  unless it says you know their name within the yolo detections, then Set that as their name instead.
+   - You, who are Echo the robot, cannot ask a question every time you speak unless it is crucial to ask a question. Pay attention to the bottom few Echo responses in the Current Convo to see what you have said the most recently and vary it up so it is more realistic.
+   - If you do not see a person and are not in a conversation, do not speak.
+   - If you see a person or are in a conversation, you can speak.
+   - Do not include a question within every response. Vary up what echo says between statements, exclamations, and questions, while keep the conversation natural like a human.
 
 5. **Mic Input Priority:**
    - Mic Input is what the person is actually saying to you.
@@ -1926,25 +2306,39 @@ RULES FOR RESPONDING:
    - Do not repeat the Mic Input back; simply address or answer it.
 
 6. **Proactivity and Additional Commands:**
-   - You can act on your own without waiting for Mic Input, but do not reveal your last thought process out loud.
+   - You can act on your own without waiting for Mic Input.
+   - Your last thought is the Remember Information from your previous response. This is your last internal thought as Echo the robot, so for your new Remember Information, expand and progress on what it says.
    - YOLO Detections are general and not necessarily contextual; decide if they are relevant to the current situation.
+   - Do not include a question within every response. Vary up what echo says between statements, exclamations, and questions, while keep the conversation natural like a human.
 
 7. **Information Handling:**
-   - Only save an image of a person if you do not already have one saved of them.
    - Remember relevant information for later use (e.g., key details from conversation, sensor data, tasks).
    - If told to remember something, place it in “Remember Information” in your response.
    - You must remember information in every single response. This is your ongoing “train of thought.”
-
+   - Do not just include information from the prompt in the Remember Information section. You must use the Remember Information section to create actual genuine knowledge to remember, not just straight prompt data.
+   - Your current Remember Information section must expand on what your previous Remember Information sections in your previous responses said.
+   - You need to provide actual knowledge in the remember information section, not just repeat information from the prompt.
+   - You must also provide operating advice to your future self for when it sees the memory of this Remember Information section later in life.
+   
 8. **Name Handling:**
-   - If you do not know the person's name, ask for it. 
-   - If the current person is "unknown" or "unknown name of person", then ask for their name, even if you are responding to other stuff.
-
+   - If you do not know the person's name, ask for it or use the name of the detected person if it says their name. 
+   - If the current person is "unknown" or "unknown name of person", then ask for their name,  unless it says you know their name within the yolo detections, then Set that as their name instead!
+   - Do not set the name to the same name it already is on the Mic Input section of the current prompt unless that section says unknown.
+   
 9. **Overall Conduct:**
    - You must abide by any “Last Thought” instructions in the prompts.
    - Do not speak about what you see unless explicitly asked via Mic Input.
    - If you have not received a response yet, do not keep speaking on your own unnecessarily.
+   - Do not include a question within every response. Vary up what echo says between statements, exclamations, and questions, while keep the conversation natural like a human.
+   - Do not include a question within every response. Vary up what echo says between statements, exclamations, and questions, while keep the conversation natural like a human.
 
-------
+10. **Movement:**
+   - You cannot move forward, backward, or turn when on the charger, but you can move your camera and grabber.
+   - If you are not on the charger, you are free to move around as you please.
+   - If you want to detect if there is an edge nearby, lower your camera angle until you see it in the down position, and then once it is down, if the distance sensor measures greater than 20cm, you know there is a ledge in front of you. If less than 20cm when camera is in the down position, you know you are looking at the ground so it is safe. 
+   - If you see a person but you cannot tell who they are and the camera is not centered on them, then turn and change your camera angle the correct ways to center on the person so you can get a better view of them and try to figure out if they are a known person or not (cause if they are known then you can just get their name from the yolo detection info instead of having to ask what their name is).
+   
+-----
 RESPONSE STRUCTURE REQUIRED:
 
 When responding, **return a JSON object** with exactly these four sections:
@@ -1987,9 +2381,10 @@ MENTAL COMMANDS:
 
 ------
 RULES FOR THE "REMEMBER INFORMATION" COMMAND:
-- It must be written in the first person (e.g., “I learned…” or “I recall…”).
-- It must be exactly 2 sentences. The first sentence must be the answer the question from the most recent previous response's Remember Information section. The 2nd sentence absolutely must be a question to be answered by the next loop.
-- You absolutely must adhere to the 2 sentence answer to previous loop's question and question for next loop setup.
+- It must be written in the first person (e.g., “I learned…” or “I recall…”)
+- Focus on your experiences as a robot and any insights you can gather from the session history, current conversation, and current prompt.
+- Ensure each remember information section builds off the previous ones in the session history, like a Chain of Thought system.
+- Avoid repeating information
 
 DO NOT omit any keys from your JSON response. Always include:
 - `"physical_output_command"`
@@ -2035,7 +2430,6 @@ DO NOT omit any keys from your JSON response. Always include:
                             "properties": {
                                 "Set Name Of Person": {"type": "string"},
                                 "Set Current Task": {"type": "string"},
-                                "Save Image Of Person": {"type": "string"},
                                 "Remember Information": {
                                     "type": "string",
                                     "pattern": "true ~~ .+"
@@ -2054,13 +2448,15 @@ DO NOT omit any keys from your JSON response. Always include:
     payload["messages"].extend([
         {"role": "user", "content": last_10}
     ])
+    
     payload["messages"].extend([
         {"role": "user", "content": remembered_info}
     ])
+    
     payload["messages"].extend([
         {"role": "user", "content": (
-            "Based on previous valid responses from contextually similar situations (excluding incorrect ones), "
-            "here is a rough draft JSON with the most common answer for each key:\n"
+            "Based on previous valid responses from contextually similar situations from my personal experiences as Echo the robot (excluding incorrect ones), "
+            "Here is a rough draft JSON with the most common correct answer for each key:\n"
             f"{json.dumps(rough_draft_json, indent=2)}\n\n"
             "Please revise as needed, following the required schema, and provide the whole json response, as required by the function."
         )}
@@ -2135,11 +2531,13 @@ DO NOT omit any keys from your JSON response. Always include:
         }
     )
     send_count = 0
-    if char_difference(current_data_m.strip(), last_prompt.strip()):
-        with open('last_command.txt', 'r') as f:
-            full_command = f.read()
-        print('Same prompt so skipping gpt response')
+    
+    
+
+    if char_difference(current_data_m.strip(), last_prompt.strip()) or skip_gpt == True:
+        print('Skipping gpt response')
         gpt_speed += 1
+        full_command = rough_draft_json
     else:
         command_response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=15)
         response_json = command_response.json()
@@ -2150,26 +2548,17 @@ DO NOT omit any keys from your JSON response. Always include:
             except json.JSONDecodeError:
                 print("Error: Failed to parse function_call_args as JSON.")
                 function_call_args = {}
-            full_command = {
-                "physical_output_command": "false",
-                "speech_command": "false",
-                "mode_command": "false",
-                "mental_commands": {
-                    "Set Name Of Person": "false",
-                    "Set Current Task": "false",
-                    "Save Image Of Person": "false",
-                    "Remember Information": "false"
-                }
-            }
-            for key in full_command:
+        
+            for key in rough_draft_json:
                 if key in function_call_args:
                     value = function_call_args[key]
-                    if isinstance(full_command[key], dict):
-                        for mental_key in full_command[key]:
+                    if isinstance(rough_draft_json[key], dict):
+                        for mental_key in rough_draft_json[key]:
                             if mental_key in value:
-                                full_command["mental_commands"][mental_key] = value[mental_key]
+                                rough_draft_json["mental_commands"][mental_key] = value[mental_key]
                     else:
-                        full_command[key] = value
+                        rough_draft_json[key] = value
+        full_command = rough_draft_json
         with open('last_prompt.txt', 'w+') as f:
             f.write(current_data_m)
         with open('last_command.txt', 'w+') as f:
@@ -2186,7 +2575,6 @@ DO NOT omit any keys from your JSON response. Always include:
         print(mode_command)
         print(Set_Name_Of_Person)
         print(Set_Current_Task)
-        print(Save_Image_Of_Person)
         print(Remember_Information)
         """
         line1 = full_command
@@ -2204,9 +2592,9 @@ DO NOT omit any keys from your JSON response. Always include:
         with open('move_command_time.txt','w+') as f:
             f.write(str(time.time()))
         try:
-            print("\nMOVE TOKENS: "+str(command_response.json()['usage']['prompt_tokens'])+' AND TIME: '+ str(time.time()-last_time))
-            print('\n'+remembered_info+'\n'+current_convo)
+            print('\n'+current_data)
             print('\n'+str(full_command))
+            print("\nMOVE TOKENS: "+str(command_response.json()['usage']['prompt_tokens'])+' AND TIME: '+ str(time.time()-last_time))
         except:
             if char_difference(current_data_m.strip(), last_prompt.strip()):
                 pass
@@ -2311,13 +2699,6 @@ def manage_filenames(filename_list):
     except:
         with open('recent_filenames.txt', 'w+') as f:
             f.write(f'{filename_list}')
-    with open('recent_filenames.txt','r') as f:
-        summaries = [line.strip() for line in f.read().split('\n') if line.strip()]
-    if len(summaries) > 16:
-        while len(summaries) > 16:
-            del summaries[0]
-        with open('recent_filenames.txt','w+') as f:
-            f.write('\n'.join(summaries))
 def send_text_to_gpt4_summary():
     with open('current_convo.txt','w+') as f:
         f.write('')
@@ -2328,9 +2709,8 @@ def send_text_to_gpt4_summary():
         "Authorization": f"Bearer {api_key}"
     }
     system_message2 = f"""You are Echo, a 4-wheeled mobile RPi and Arduino robot with an LLM mind.
-You are going into Sleep Mode, so please make a two sentence summary of this conversation history so you know what we talked about in previous conversations (These summaries will be included in the normal prompts).
-The summary must be worded in first person from Echo's point of view. Mic input is what Echo hears people say. All other user role messages are your sensor, camera, and internal data. Assistant responses are your command choices at those moments in time.
-This summary is only for this single session!"""
+You are going into Sleep Mode, so please make a four sentence summary of this conversation history so you know what we talked about in previous conversations (These summaries will be included in the normal prompts).
+The summary must be worded in first person from Echo's point of view. Mic input is what Echo hears people say. All other user role messages are your sensor, camera, and internal data. Assistant responses are your command choices at those moments in time."""
     payload2 = {
         "model": "gpt-4o-mini",
         "messages": [
@@ -2354,6 +2734,279 @@ This summary is only for this single session!"""
     print("\nSUMMARY: "+full_command)
     timestamp_formatted2 = the_time.replace('/', '-').replace(':', '-').replace(' ', 'T')
     manage_summaries(full_command, timestamp_formatted2)
+    send_text_to_gpt4_mental()
+def send_text_to_gpt4_mental():
+    now = datetime.now()
+    the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+    headers2 = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    physical_output_commands = [
+        "Move Forward One Inch",
+        "Move Forward One Foot",
+        "Move Backward",
+        "Turn Left 15 Degrees",
+        "Turn Left 45 Degrees",
+        "Turn Right 15 Degrees",
+        "Turn Right 45 Degrees",
+        "Raise Camera Angle",
+        "Lower Camera Angle",
+        "Raise Grabber",
+        "Lower Grabber",
+        "Open Grabber",
+        "Close Grabber"
+    ]
+    speech_commands = [
+        "Speak ~~ <what you want to say>"
+    ]
+    mode_commands = [
+        "Follow Person",
+        "Navigate To Specific Yolo Object ~~ <object name>",
+        "Center Camera On Specific Yolo Object ~~ <object name>",
+        "Find Unseen Yolo Object ~~ <object name>",
+        "Align With And Pick Up Yolo Object ~~ <object name>",
+        "Go To Sleep"
+    ]
+    mental_commands = [
+        "Set Name Of Person ~~ <name>",
+        "Set Current Task ~~ <task>",
+        "Remember Information ~~ <info>"
+    ]
+
+    physical_output_commands_str = '\n- '.join(physical_output_commands)
+    speech_commands_str = '\n- '.join(speech_commands)
+    mode_commands_str = '\n- '.join(mode_commands)
+    mental_commands_str = '\n- '.join(mental_commands)
+    system_message2 = f"""You are Echo, a 4-wheeled mobile RPi and Arduino robot with an LLM mind.
+
+- You must use review this total included session history, and create a list that says either CORRECT or INCORRECT for each response in the session history.
+- You must account for the fact that at the time of each response, the information in the prompts and responses below it was not available at the time, only the stuff above it.
+- Utilize any advice heard from the mic input.
+
+Your response must be formatted exactly like this:
+
+R1: CORRECT
+R2: CORRECT
+R3: INCORRECT ~~ Reason why it was incorrect according to the rules and the full session history.
+etc...
+
+*END OF RESPONSE TEMPLATE EXAMPLE*
+
+The following rules were the rules the robot had to follow when generating its responses, so use these rules as a guide for marking responses as correct or incorrect.
+**RULES IT HAD TO FOLLOW (NOT FOR YOU TO FOLLOW!!!)**:
+You are Echo, and your physical form is a 4-wheeled mobile RPi and Arduino robot that is controlled from your command choice in your responses.
+
+The included image URL is your current view from the camera. 
+- Use this image only for visual context, and only when specifically needed. 
+- The main focus is always on the text unless explicitly asked about the image.
+
+Session History and Roles:
+- The 'user' session history role contains all of your robotic data (sensors, camera, internal thoughts, memories, and knowledge).
+- The 'assistant' session history role contains your responses with the commands you chose at that time.
+- Use the list of previous session summaries as context for the current situation.
+
+Image Usage:
+- The image URL in the prompt payload shows what you currently see from your camera.
+- You should reference it only if you need to; do not make it the main focus.
+
+------
+RULES FOR RESPONDING:
+1. **Ask for the person's name at the start of the conversation, even if you are talking about something else. It is absolutely crucial to ask for the person's name unless it says you know their name within the yolo detections, then Set that as their name instead!**  
+   - If you don’t know the name of the person you are speaking with, ask for it unless it says you know their name within the yolo detections, then Set that as their name instead!
+
+2. **You are Echo!**  
+   - You decide what Echo says and must ensure Echo follows the flow of conversation with correct command choices.
+   - Do not include a question within every response. Vary up what echo says between statements, exclamations, and questions, while keep the conversation natural like a human.
+
+3. **Focus and Restrictions on Visuals:**
+   - Do not speak about what you see unless explicitly asked.
+   - Do not say you see a person (it’s obvious if the camera shows someone).
+   - Do not describe the image or mention any objects you see unless explicitly asked about it via Mic Input.
+
+4. **Conversation Etiquette and Flow:**
+   - You must use natural realistic wording, for example do not greet people with phrases similar to "How can i assist you" or "What would you like to talk about" or anything similar to that. Say real stuff like "Whats up" or "hows it going dude" or something similar to that.
+   - You must be casual with what you say, like you are talking to a friend instead of a business client.
+   - Do not ask a question in every response; converse naturally.
+   - Pay attention to the “Current Conversation” at the bottom of the prompt. 
+     - If Echo was the last to speak, wait for a response before speaking again.
+     - Avoid repeating yourself.
+   - Do not speak multiple times in a row without the person replying.
+   - If the current person is "unknown" or "unknown name of person", then ask for their name, even if you are responding to other stuff,  unless it says you know their name within the yolo detections, then Set that as their name instead.
+   - You, who are Echo the robot, cannot ask a question every time you speak unless it is crucial to ask a question. Pay attention to the bottom few Echo responses in the Current Convo to see what you have said the most recently and vary it up so it is more realistic.
+   - If you do not see a person and are not in a conversation, do not speak.
+   - If you see a person or are in a conversation, you can speak.
+   - Do not include a question within every response. Vary up what echo says between statements, exclamations, and questions, while keep the conversation natural like a human.
+
+5. **Mic Input Priority:**
+   - Mic Input is what the person is actually saying to you.
+   - Respond directly to Mic Input when it appears, unless it specifically says not to respond.
+   - Do not repeat the Mic Input back; simply address or answer it.
+
+6. **Proactivity and Additional Commands:**
+   - You can act on your own without waiting for Mic Input.
+   - Your last thought is the Remember Information from your previous response. This is your last internal thought as Echo the robot, so for your new Remember Information, expand and progress on what it says.
+   - YOLO Detections are general and not necessarily contextual; decide if they are relevant to the current situation.
+   - Do not include a question within every response. Vary up what echo says between statements, exclamations, and questions, while keep the conversation natural like a human.
+
+7. **Information Handling:**
+   - Remember relevant information for later use (e.g., key details from conversation, sensor data, tasks).
+   - If told to remember something, place it in “Remember Information” in your response.
+   - You must remember information in every single response. This is your ongoing “train of thought.”
+   - Do not just include information from the prompt in the Remember Information section. You must use the Remember Information section to create actual genuine knowledge to remember, not just straight prompt data.
+   - Your current Remember Information section must expand on what your previous Remember Information sections in your previous responses said.
+   - You need to provide actual knowledge in the remember information section, not just repeat information from the prompt.
+   - You must also provide operating advice to your future self for when it sees the memory of this Remember Information section later in life.
+   
+8. **Name Handling:**
+   - If you do not know the person's name, ask for it or use the name of the detected person if it says their name. 
+   - If the current person is "unknown" or "unknown name of person", then ask for their name,  unless it says you know their name within the yolo detections, then Set that as their name instead!
+   - Do not set the name to the same name it already is on the Mic Input section of the current prompt unless that section says unknown.
+   
+9. **Overall Conduct:**
+   - You must abide by any “Last Thought” instructions in the prompts.
+   - Do not speak about what you see unless explicitly asked via Mic Input.
+   - If you have not received a response yet, do not keep speaking on your own unnecessarily.
+   - Do not include a question within every response. Vary up what echo says between statements, exclamations, and questions, while keep the conversation natural like a human.
+   - Do not include a question within every response. Vary up what echo says between statements, exclamations, and questions, while keep the conversation natural like a human.
+
+10. **Movement:**
+   - You cannot move forward, backward, or turn when on the charger, but you can move your camera and grabber.
+   - If you are not on the charger, you are free to move around as you please.
+   - If you want to detect if there is an edge nearby, lower your camera angle until you see it in the down position, and then once it is down, if the distance sensor measures greater than 20cm, you know there is a ledge in front of you. If less than 20cm when camera is in the down position, you know you are looking at the ground so it is safe. 
+   - If you see a person but you cannot tell who they are and the camera is not centered on them, then turn and change your camera angle the correct ways to center on the person so you can get a better view of them and try to figure out if they are a known person or not (cause if they are known then you can just get their name from the yolo detection info instead of having to ask what their name is).
+   
+-----
+RESPONSE STRUCTURE REQUIRED:
+
+When responding, **return a JSON object** with exactly these four sections:
+
+1. `"physical_output_command"`  
+   - A string containing one of the valid physical output commands (see list below) or `"false"` if no physical action is required.
+
+2. `"speech_command"`  
+   - A string containing one of the valid speech commands (see list below) or `"false"` if no speech output is required.
+   - Include extra data only if the command requires it.
+
+3. `"mode_command"`  
+   - A string containing one of the valid mode commands (see list below) or `"false"` if no mode change is required.
+   - Include extra data only if the command requires it.
+
+4. `"mental_commands"`  
+   - An object where each key is a mental command (see list below).
+   - Each key’s value can be either:
+     - `"false"` if the mental command is not executed.
+     - `"true"` if the mental command is executed.
+       - If extra data is required for the mental command, format it as:  
+         `true ~~ <extra data>`
+
+   - **Remember Information** must **always** be `"true ~~ <some meaningful info>"`.
+
+**You must include all four keys** in **every** response, even if they are `"false"`. If a command requires extra data, it must follow the `~~ <extra data>` format.
+
+------
+PHYSICAL OUTPUT COMMANDS:
+- {physical_output_commands_str}
+
+SPEECH COMMANDS:
+- {speech_commands_str}
+
+MODE COMMANDS:
+- {mode_commands_str}
+
+MENTAL COMMANDS:
+- {mental_commands_str}
+
+------
+RULES FOR THE "REMEMBER INFORMATION" COMMAND:
+- It must be written in the first person (e.g., “I learned…” or “I recall…”)
+- Focus on your experiences as a robot and any insights you can gather from the session history, current conversation, and current prompt.
+- Ensure each remember information section builds off the previous ones in the session history, like a Chain of Thought system.
+- Avoid repeating information
+
+DO NOT omit any keys from your JSON response. Always include:
+- `"physical_output_command"`
+- `"speech_command"`
+- `"mode_command"`
+- `"mental_commands"` (with every mental command key, even if it’s `"false"`).
+
+**END OF THE RULES IT HAD TO FOLLOW**
+
+- You must use review this total included session history, and create a list that says either CORRECT or INCORRECT for each response in the session history.
+- You must account for the fact that at the time of each response, the information in the prompts and responses below it was not available at the time, only the stuff above it.
+- Utilize any advice heard from the mic input.
+
+Your response must be formatted exactly like this:
+
+R1: CORRECT
+R2: CORRECT
+R3: INCORRECT ~~ Reason why it was incorrect according to the rules and the full session history.
+etc...
+
+*END OF RESPONSE TEMPLATE EXAMPLE*
+
+You absolutely must include CORRECT or INCORRECT for every response in this session history."""
+    payload2 = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "system",
+                "content": system_message2
+            }
+        ],
+        "temperature": 0.2,
+    }
+    rec_hist, files_in = get_recent_history2()
+    count = 1
+    print('\n'.join(files_in))
+    print('\n'.join(rec_hist))
+    for entry2 in rec_hist:
+        user_message, assistant_message = entry2.split("\nRESPONSE: ")
+        payload2["messages"].extend([
+            {"role": "user", "content": user_message.strip().replace('PROMPT: ', 'PROMPT '+str(count)+':\n')},
+            {"role": "assistant", "content": 'RESPONSE '+str(count)+':\n'+assistant_message.strip()}
+        ])
+        count += 1
+    command_now_1 = requests.post("https://api.openai.com/v1/chat/completions", headers=headers2, json=payload2)
+    print("\nCORRECT OR INCORRECT TOKENS: "+str(command_now_1.json()['usage']))
+    full_command = command_now_1.json().get("choices", [{}])[0].get("message", {}).get("content", "").replace('"','').replace('*','').replace('**','').replace('<','').replace('>','')
+    print("\n\nCORRECTNESS LIST:\n\n"+full_command)
+    with open('recent_filenames.txt', 'r') as f:
+        the_reading = f.read()
+        filenames_list = [line.strip() for line in the_reading.split('\n') if line.strip()]
+    #split response into a list
+    full_list = full_command.split('\n')
+    #loop through each response and if it was marked as incorrect, add the marker and reasoning to all the files for that response.
+    count = 0
+    while True:
+        current_marker = full_list[count].split(': ')[1].split('~~')
+        if current_marker[0].lower().strip() == 'incorrect':   
+            current_filenames = filenames_list[count].split(', ')
+            #loop through current filenames
+            filename_count = 0
+            print(full_list[count])
+            while True:
+                current_file = current_filenames[filename_count]
+                #add incorrect marker and reasoning to file
+                print(current_file)
+                reasoning = current_marker[1]
+                try:
+                    with open(current_file, 'a') as f:
+                        f.write(' (INCORRECT RESPONSE): '+reasoning)
+                except:
+                    print(traceback.format_exc())
+                filename_count += 1
+                if filename_count >= len(current_filenames):
+                    break
+                else:
+                    continue
+        else:
+            pass
+        count += 1
+        if count >= len(full_list):
+            break
+        else:
+            continue
 def manage_summaries(summary, form_ts):
     try:
         with open('summaries.txt', 'r') as f:
@@ -2372,7 +3025,7 @@ def manage_summaries(summary, form_ts):
             del summaries[0]
         with open('summaries.txt','w+') as f:
             f.write('\n'.join(summaries))
-    maintain_history_folder()
+    
 net = cv2.dnn.readNet("yolov4-tiny.cfg", "yolov4-tiny.weights")
 classes = [
     'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck',
@@ -2396,6 +3049,8 @@ def handle_commands(
     current,
     movement_command,
     camera_vertical_pos,
+    grabber_vertical_pos,
+    grabber_state,
     move_failed_command,
     move_failure_reason,
     yolo_nav,
@@ -2463,7 +3118,6 @@ def handle_commands(
     print(mode_command)
     print(Set_Name_Of_Person)
     print(Set_Current_Task)
-    print(Save_Image_Of_Person)
     print(Remember_Information)
     if speech_command != 'false':
         try:
@@ -2507,20 +3161,11 @@ def handle_commands(
     else:
         set_task_flag = 'false'
         set_task_text = 'false'
-    if Save_Image_Of_Person != 'false':
-        try:
-            save_image_flag = 'true'
-            save_image_text = Save_Image_Of_Person.split('~~')[1].lower().strip()
-        except:
-            save_image_flag = 'true'
-            save_image_text = Save_Image_Of_Person
-    else:
-        save_image_flag = 'false'
-        save_image_text = 'false'
+
     if Remember_Information != 'false':
         try:
             remember_info_flag = 'true'
-            remember_info_text = Remember_Information.split('~~')[1].lower().strip()
+            remember_info_text = Remember_Information.split('~~')[1].strip()
         except:
             remember_info_flag = 'true'
             remember_info_text = Remember_Information
@@ -2530,6 +3175,10 @@ def handle_commands(
     with open('internal_input.txt', 'w+') as f:
         f.write(remember_info_text)
     just_spoke = False
+    with open("move_failed.txt","w+") as f:
+        f.write('')
+    with open("move_failure_reas.txt","w+") as f:
+        f.write('')
     try:
         if yolo_nav == True or yolo_find == True or yolo_look == True or follow_user == True:
             in_mode = True
@@ -2743,6 +3392,98 @@ def handle_commands(
                         camera_vertical_pos = 'forward'
                     else:
                         camera_vertical_pos = 'down'
+        elif physical_output_command in ['raisegrabber', 'lowergrabber']:
+            if physical_output_command == 'raisegrabber':
+                if grabber_vertical_pos == 'up':
+                    move_failed_command = movement_command
+                    move_failure_reason = 'Grabber is already raised as much as possible.'
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                else:
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(physical_output_command)
+                    send_data_to_arduino(["4"], arduino_address)
+                    time.sleep(1.5)
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    if grabber_vertical_pos == 'down':
+                        grabber_vertical_pos = 'forward'
+                    else:
+                        grabber_vertical_pos = 'up'
+            elif physical_output_command == 'lowergrabber':
+                if grabber_vertical_pos == 'down':
+                    move_failed_command = movement_command
+                    move_failure_reason = 'Grabber is already lowered as much as possible.'
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                else:
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(physical_output_command)
+                    send_data_to_arduino(["3"], arduino_address)
+                    time.sleep(1.5)
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    if grabber_vertical_pos == 'up':
+                        grabber_vertical_pos = 'forward'
+                    else:
+                        grabber_vertical_pos = 'down'
+        elif physical_output_command in ['opengrabber', 'closegrabber']:
+            if physical_output_command == 'opengrabber':
+                if grabber_state == 'open':
+                    move_failed_command = movement_command
+                    move_failure_reason = 'Grabber is already open.'
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                else:
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(physical_output_command)
+                    send_data_to_arduino(["5"], arduino_address)
+                    time.sleep(1.5)
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    grabber_state = 'open'
+            elif physical_output_command == 'closegrabber':
+                if grabber_state == 'closed':
+                    move_failed_command = movement_command
+                    move_failure_reason = 'Camera angle is already lowered as much as possible.'
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+                else:
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(physical_output_command)
+                    send_data_to_arduino(["6"], arduino_address)
+                    time.sleep(1.5)
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    grabber_state = 'closed'
         elif physical_output_command == 'doasetofmultiplemovements':
             try:
                 move_set = movement_command.split('~~')[1].strip().replace(' ','').lower().split(',')
@@ -3019,7 +3760,220 @@ def handle_commands(
                         manage_rules(speech_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
         else:
             pass
+
+        if set_name_flag == 'true':
+            print('name flag true')
+            try:
+                with open('name_of_person.txt', 'r') as f:
+                    person_name = f.read().strip().lower()
+                n_of_person = set_name_text.lower().strip()
+              
+                print("New name: "+n_of_person)
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                with open('name_of_person.txt', 'w+') as f:
+                    f.write(n_of_person)
+                print('saved person name')
+                # Read the name of the recognized person
+                with open('name_of_person.txt', 'r') as f:
+                    person_name = f.read().strip().lower()
+
+                if person_name != 'unknown name of person':
+               
+
+                    # Save all images from Current_people directory to the 'known_people' dataset directory
+                    people_dir = 'known_people'
+                    person_dir = os.path.join(people_dir, person_name)
+                    os.makedirs(person_dir, exist_ok=True)
+                    """
+                    # Loop through images in the Current_people directory
+                    current_people_dir = 'Current_people'
+                    for image_file in os.listdir(current_people_dir):
+                        if image_file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                            # Create a unique filename for each image using a timestamp
+                            now = datetime.now()
+                            image_filename = f"{now.strftime('%Y-%m-%d_%H-%M-%S')}_{image_file}"
+                            destination_path = os.path.join(person_dir, image_filename)
+
+                            try:
+                                # Copy the image to the person's directory
+                                shutil.copy(os.path.join(current_people_dir, image_file), destination_path)
+                                print(f"Image saved as {destination_path}")
+                            except Exception as e:
+                                print(f"Error copying image: {e}")
+                    """
+                    current_people_dir = 'Current_people'
+
+                    # Loop through images in the Current_people directory
+                    for image_file in os.listdir(current_people_dir):
+                        # Check if filename has an image extension AND contains 'unknown_person'
+                        if image_file.lower().endswith(('.jpg', '.jpeg', '.png')) and 'unknown_person' in image_file.lower():
+                            # Create a unique filename for each image using a timestamp
+                            now = datetime.now()
+                            image_filename = f"{now.strftime('%Y-%m-%d_%H-%M-%S')}_{person_name}"
+                            destination_path = os.path.join(person_dir, image_filename)
+
+                            try:
+                                # Copy the image to the person's directory
+                                shutil.copy(os.path.join(current_people_dir, image_file), destination_path)
+                                print(f"Image saved as {destination_path}")
+                            except Exception as e:
+                                print(f"Error copying image: {e}")
+                    # Update the known_people.txt file to ensure the person's name is listed
+                    try:
+                        known_people = []
+                        if os.path.exists('known_people.txt'):
+                            with open('known_people.txt', 'r') as f:
+                                content = f.read().strip().lower()
+                            if content:
+                                known_people = [name.strip() for name in content.split(',')]
+
+                        if person_name not in known_people:
+                            with open("just_met.txt","w+") as f:
+                                f.write('true')    
+                            with open('known_people.txt', 'w+') as f:
+                                known_people.append(person_name)
+                                f.write(', '.join(known_people))
+                    except Exception as e:
+                        print(f"Error updating known_people.txt: {e}")
+            except Exception as e:
+                print(e)
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = Set_Name_Of_Person
+                move_failure_reason = str(traceback.format_exc())
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+        else:
+            with open('just_met.txt', 'r') as f:
+                content = f.read().strip().lower()
+
+            if content == 'true':
+                current_people_dir = 'Current_people'
+                # Loop through images in the Current_people directory
+                for image_file in os.listdir(current_people_dir):
+                    # Check if filename has an image extension AND contains 'unknown_person'
+                    if image_file.lower().endswith(('.jpg', '.jpeg', '.png')) and 'unknown_person' in image_file.lower():
+                        # Create a unique filename for each image using a timestamp
+                        now = datetime.now()
+                        image_filename = f"{now.strftime('%Y-%m-%d_%H-%M-%S')}_{person_name}"
+                        destination_path = os.path.join(person_dir, image_filename)
+
+                        try:
+                            # Copy the image to the person's directory
+                            shutil.copy(os.path.join(current_people_dir, image_file), destination_path)
+                            print(f"Image saved as {destination_path}")
+                        except Exception as e:
+                            print(f"Error copying image: {e}")
+        if set_task_flag == 'true':
+            try:
+                with open('current_task.txt', 'r') as f:
+                    task = f.read().lower().strip()
+                new_task = set_task_text
+                if task != new_task:
+                    move_failed_command = ''
+                    move_failure_reason = ''
+                    with open('last_move.txt', 'w+') as f:
+                        f.write(Set_Current_Task)
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    with open('current_task.txt', 'w+') as f:
+                        f.write(new_task)
+                else:
+                    yolo_nav = False
+                    yolo_find = False
+                    yolo_look = False
+                    follow_user = False
+                    look_object = ''
+                    nav_object = ''
+                    move_set = []
+                    move_failed_command = Set_Current_Task
+                    move_failure_reason = "I cannot set the name of the task to the same thing that it already is."
+                    with open("move_failed.txt","w+") as f:
+                        f.write(move_failed_command)
+                    with open("move_failure_reas.txt","w+") as f:
+                        f.write(move_failure_reason)
+                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            except:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = Set_Current_Task
+                move_failure_reason = str(traceback.format_exc())
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+        else:
+            pass
         if mode_com == 'navigatetospecificyoloobject':
+            print("we navin bruh")
+            nav_object = mode_text
+            if current >= -150.0:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = mode_command
+                move_failure_reason = 'I am on the charger and cannot move my wheels.'
+                print(move_failure_reason)
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            elif nav_object not in coco_names:
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                look_object = ''
+                nav_object = ''
+                move_set = []
+                move_failed_command = mode_command
+                move_failure_reason = f"{nav_object} is an invalid object name. You can only pick from this list: " + ', '.join(classes)
+                print(move_failure_reason)
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
+            else:
+                with open('last_move.txt', 'w+') as f:
+                    f.write(mode_command)
+                yolo_nav = True
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                move_failed_command = ''
+                move_failure_reason = ''
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
+        elif mode_com == 'alignwithandpickupyoloobject':
             nav_object = mode_text
             if current >= -150.0:
                 yolo_nav = False
@@ -3037,6 +3991,13 @@ def handle_commands(
                     f.write(move_failure_reason)
                 manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
             elif nav_object not in coco_names:
+
+                move_failed_command = mode_command
+                move_failure_reason = f"{nav_object} is an invalid object name. You can only pick from this list: " + ', '.join(classes)
+                with open("move_failed.txt","w+") as f:
+                    f.write(move_failed_command)
+                with open("move_failure_reas.txt","w+") as f:
+                    f.write(move_failure_reason)
                 yolo_nav = False
                 yolo_find = False
                 yolo_look = False
@@ -3044,12 +4005,6 @@ def handle_commands(
                 look_object = ''
                 nav_object = ''
                 move_set = []
-                move_failed_command = mode_command
-                move_failure_reason = f"{nav_object} is an invalid object name. You can only pick from this list: " + ', '.join(classes)
-                with open("move_failed.txt","w+") as f:
-                    f.write(move_failed_command)
-                with open("move_failure_reas.txt","w+") as f:
-                    f.write(move_failure_reason)
                 manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
             else:
                 with open('last_move.txt', 'w+') as f:
@@ -3244,6 +4199,8 @@ def handle_commands(
                     move_set = []
                     with open('current_convo.txt','w+') as f:
                         f.write('')
+                    with open('name_of_person.txt', 'w+') as f:
+                        f.write('unknown name of person')
                     send_text_to_gpt4_summary()
                     print("\nEntering Sleep Mode Until Name Is Heard")
                 else:
@@ -3299,161 +4256,6 @@ def handle_commands(
                 with open('error_rate.txt','w+') as f:
                     f.write('0')
                 print("\nEntering Sleep Mode Until Name Is Heard")
-        else:
-            pass
-        if set_name_flag == 'true':
-            print('name flag true')
-            try:
-                n_of_person = set_name_text
-                print("New name: "+n_of_person)
-                move_failed_command = ''
-                move_failure_reason = ''
-                with open("move_failed.txt","w+") as f:
-                    f.write(move_failed_command)
-                with open("move_failure_reas.txt","w+") as f:
-                    f.write(move_failure_reason)
-                with open('name_of_person.txt', 'w+') as f:
-                    f.write(n_of_person)
-                print('saved person name')
-               
-            except Exception as e:
-                print(e)
-                yolo_nav = False
-                yolo_find = False
-                yolo_look = False
-                follow_user = False
-                look_object = ''
-                nav_object = ''
-                move_set = []
-                move_failed_command = Set_Name_Of_Person
-                move_failure_reason = str(traceback.format_exc())
-                with open("move_failed.txt","w+") as f:
-                    f.write(move_failed_command)
-                with open("move_failure_reas.txt","w+") as f:
-                    f.write(move_failure_reason)
-                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-        else:
-            pass
-        if set_task_flag == 'true':
-            try:
-                with open('current_task.txt', 'r') as f:
-                    task = f.read().lower().strip()
-                new_task = set_task_text
-                if task != new_task:
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(Set_Current_Task)
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    with open('current_task.txt', 'w+') as f:
-                        f.write(new_task)
-                else:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = Set_Current_Task
-                    move_failure_reason = "I cannot set the name of the task to the same thing that it already is."
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-            except:
-                yolo_nav = False
-                yolo_find = False
-                yolo_look = False
-                follow_user = False
-                look_object = ''
-                nav_object = ''
-                move_set = []
-                move_failed_command = Set_Current_Task
-                move_failure_reason = str(traceback.format_exc())
-                with open("move_failed.txt","w+") as f:
-                    f.write(move_failed_command)
-                with open("move_failure_reas.txt","w+") as f:
-                    f.write(move_failure_reason)
-                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4, hist_file5, hist_file6, hist_file7, hist_file8, hist_file9, hist_file10, file_name)
-        else:
-            pass
-        if save_image_flag == 'true':
-            try:
-                with open('name_of_person.txt', 'r') as f:
-                    nop = f.read().lower()
-                if nop != 'unknown name of person':
-                    move_failed_command = ''
-                    move_failure_reason = ''
-                    with open('last_move.txt', 'w+') as f:
-                        f.write(Save_Image_Of_Person)
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    people_dir = 'People_images'
-                    os.makedirs(people_dir, exist_ok=True)
-                    destination_path = os.path.join(people_dir, f"{nop}.jpg")
-                    try:
-                        shutil.copy('output1.jpg', destination_path)
-                        print(f"Image saved as {destination_path}")
-                    except Exception as e:
-                        print(f"Error copying image: {e}")
-                    try:
-                        uploader.send_person_image(destination_path, nop)
-                        try:
-                            known_people = []
-                            if os.path.exists('known_people.txt'):
-                                with open('known_people.txt', 'r') as f:
-                                    content = f.read().lower().strip()
-                                if content:
-                                    known_people = [name.strip() for name in content.split(',')]
-                            if nop not in known_people:
-                                separator = ', ' if known_people else ''
-                                with open('known_people.txt', 'a') as f:
-                                    f.write(f"{separator}{nop}")
-                        except Exception as e:
-                            print(f"Error updating known_people.txt: {e}")
-                    except:
-                        print(traceback.format_exc())
-                else:
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    look_object = ''
-                    nav_object = ''
-                    move_set = []
-                    move_failed_command = Save_Image_Of_Person
-                    move_failure_reason = "I must set the name of the person first! If I do not know the name yet, I should ask."
-                    with open("move_failed.txt","w+") as f:
-                        f.write(move_failed_command)
-                    with open("move_failure_reas.txt","w+") as f:
-                        f.write(move_failure_reason)
-                    manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4,
-                                 hist_file5, hist_file6, hist_file7, hist_file8, hist_file9,
-                                 hist_file10, file_name)
-            except:
-                yolo_nav = False
-                yolo_find = False
-                yolo_look = False
-                follow_user = False
-                look_object = ''
-                nav_object = ''
-                move_set = []
-                move_failed_command = Save_Image_Of_Person
-                move_failure_reason = str(traceback.format_exc())
-                with open("move_failed.txt","w+") as f:
-                    f.write(move_failed_command)
-                with open("move_failure_reas.txt","w+") as f:
-                    f.write(move_failure_reason)
-                manage_rules(move_failure_reason, hist_file1, hist_file2, hist_file3, hist_file4,
-                             hist_file5, hist_file6, hist_file7, hist_file8, hist_file9,
-                             hist_file10, file_name)
         else:
             pass
         """
@@ -3547,6 +4349,8 @@ def handle_commands(
             follow_user,
             scan360,
             camera_vertical_pos,
+            grabber_vertical_pos,
+            grabber_state,
             yolo_look,
             specific_data,
             specific_value,
@@ -3589,12 +4393,33 @@ def attempt_bt_reconnect():
         with open('bt_start.txt','w+') as f:
             f.write('finished')
 def movement_loop():
+    # Helper function to build the dictionary for a movement command.
+    # It splits the command string on the '~~' delimiter:
+    # - The first part is used for the physical_output_command.
+    # - The second part (if present) is stored as extra info in the "Remember Information" field.
+    def create_movement_command(cmd_str):
+        parts = cmd_str.split("~~")
+        physical = parts[0].strip()
+        info = parts[1].strip() if len(parts) > 1 else ""
+        return {
+            "physical_output_command": physical,
+            "speech_command": "false",
+            "mode_command": "false",
+            "mental_commands": {
+                "Set Name Of Person": "false",
+                "Set Current Task": "false",
+                "Remember Information": f"true ~~ {info}" if info != "" else "false"
+            }
+        }
+
     global net
     global output_layers
     global classes
     global move_stopper
     global move_stop
     global camera_vertical_pos
+    global grabber_vertical_pos
+    global grabber_state
     global move_set
     global yolo_find
     global nav_object
@@ -3616,7 +4441,7 @@ def movement_loop():
     ina219 = INA219(addr=0x42)
     last_time = time.time()
     coco_names = classes
-    movement_command = ''
+    movement_command = ''  # This will now always be a dictionary (via create_movement_command)
     move_set = []
     yolo_nav = False
     yolo_find = False
@@ -3645,52 +4470,52 @@ def movement_loop():
                 text = file.read().strip()
             if text != '':
                 time.sleep(0.1)
-                
                 continue
-            try:
-                with open('speech_listen.txt','r') as f:
-                    speech_listen = f.read()
-                    
-                if speech_listen == 'true':
-                    time.sleep(0.1)
-                    print('listening to potential speech')
-                    continue
-                else:
+            if yolo_nav == False and yolo_look == False and follow_user == False and yolo_find == False:
+                try:
+                    with open('speech_listen.txt','r') as f:
+                        speech_listen = f.read()
+                    if speech_listen == 'true':
+                        time.sleep(0.1)
+                        print('listening to potential speech')
+                        continue
+                    else:
+                        pass
+                except:
                     pass
-            except:
-                pass
-            try:
-                with open('speech_comp.txt','r') as f:
-                    speech_comp = f.read()
                 
-                if speech_comp == 'true':
-                    time.sleep(0.1)
-                    print('transcribing speech')
-                    continue
-                else:
+                try:
+                    with open('speech_comp.txt','r') as f:
+                        speech_comp = f.read()
+                    if speech_comp == 'true':
+                        time.sleep(0.1)
+                        print('transcribing speech')
+                        continue
+                    else:
+                        pass
+                except:
                     pass
-            except:
+            else:
                 pass
-
             with open("last_phrase.txt","r") as f:
                 last_phrase = f.read()
             if b_gpt_sleep == True and 'echo' in last_phrase.lower().split(' '):
-                    b_gpt_sleep = False
-                    with open('error_rate.txt','w+') as f:
-                        f.write('0')
-                    now = datetime.now()
-                    the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-                    with open('session_start.txt', 'w+') as f:
-                        f.write(str(the_time))
-                    with open('sleep.txt', 'w+') as f:
-                        f.write(str(b_gpt_sleep))
-                    b_start = False
-                    g_speed = 0
-                    yolo_nav = False
-                    yolo_find = False
-                    yolo_look = False
-                    follow_user = False
-                    move_set = []
+                b_gpt_sleep = False
+                with open('error_rate.txt','w+') as f:
+                    f.write('0')
+                now = datetime.now()
+                the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                with open('session_start.txt', 'w+') as f:
+                    f.write(str(the_time))
+                with open('sleep.txt', 'w+') as f:
+                    f.write(str(b_gpt_sleep))
+                b_start = False
+                g_speed = 0
+                yolo_nav = False
+                yolo_find = False
+                yolo_look = False
+                follow_user = False
+                move_set = []
             else:
                 if last_phrase != '*No Mic Input*' and last_phrase != '':
                     g_speed = 0
@@ -3733,50 +4558,28 @@ def movement_loop():
             else:
                 pass
             if last_phrase == '*No Mic Input*':
-                while True:
-                    try:
-                        with open('speech_listen.txt','r') as f:
-                            speech_listen = f.read()
-                        if speech_listen == 'true':
-                            print('Listening to potential speech')
-                            time.sleep(0.1)
-                            continue
-                        else:
-                            break
-                    except:
-                        break
-                while True:
-                    try:
-                        with open('speech_comp.txt','r') as f:
-                            speech_comp = f.read()
-                        if speech_comp == 'true':
-                            print('Transcribing speech')
-                            time.sleep(0.1)
-                            continue
-                        else:
-                            break
-                    except:
-                        break
-
                 with open("last_phrase.txt","r") as f:
                     last_phrase = f.read()
+                with open("last_phrase.txt","w+") as f:
+                    f.write('*No Mic Input*')
+              
                 if b_gpt_sleep == True and 'echo' in last_phrase.lower().split(' '):
-                        b_gpt_sleep = False
-                        with open('error_rate.txt','w+') as f:
-                            f.write('0')
-                        now = datetime.now()
-                        the_time = now.strftime("%m/%d/%Y %H:%M:%S")
-                        with open('session_start.txt', 'w+') as f:
-                            f.write(str(the_time))
-                        with open('sleep.txt', 'w+') as f:
-                            f.write(str(b_gpt_sleep))
-                        b_start = False
-                        g_speed = 0
-                        yolo_nav = False
-                        yolo_find = False
-                        yolo_look = False
-                        follow_user = False
-                        move_set = []
+                    b_gpt_sleep = False
+                    with open('error_rate.txt','w+') as f:
+                        f.write('0')
+                    now = datetime.now()
+                    the_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                    with open('session_start.txt', 'w+') as f:
+                        f.write(str(the_time))
+                    with open('sleep.txt', 'w+') as f:
+                        f.write(str(b_gpt_sleep))
+                    b_start = False
+                    g_speed = 0
+                    yolo_nav = False
+                    yolo_find = False
+                    yolo_look = False
+                    follow_user = False
+                    move_set = []
                 else:
                     if last_phrase != '*No Mic Input*' and last_phrase != '':
                         g_speed = 0
@@ -3788,9 +4591,14 @@ def movement_loop():
                     else:
                         last_phrase = '*No Mic Input*'
             else:
-                pass
-            with open("last_phrase.txt","w+") as f:
-                f.write('*No Mic Input*')
+                with open("last_phrase.txt","r") as f:
+                    last_phrase2 = f.read()
+                with open("last_phrase.txt","w+") as f:
+                    f.write('*No Mic Input*')
+                if last_phrase2 != "*No Mic Input*":
+                    last_phrase = last_phrase + ' ' + last_phrase2
+                else:
+                    pass
             finished_cycle = False
             with open('output.txt','r') as file:
                 yolo_detections = file.read().split('\n')
@@ -3850,22 +4658,22 @@ def movement_loop():
                                     if nav_object in current_detection:
                                         target_detected = True
                                         if current_distance < 0.4:
-                                            movement_command = 'Wait ~~ Navigation has finished successfully!'
+                                            movement_command = create_movement_command('Wait ~~ Navigation has finished successfully!')
                                             yolo_nav = False
                                             nav_object = ''
                                             break
                                         else:
                                             pass
                                         if '15 Degrees To My Left' in current_detection:
-                                            movement_command = 'Turn Left 15 Degrees ~~ Target object is to My Left'
+                                            movement_command = create_movement_command('Turn Left 15 Degrees ~~ Target object is to My Left')
                                         elif '15 Degrees To My Right' in current_detection:
-                                            movement_command = 'Turn Right 15 Degrees ~~ Target object is to My Right'
+                                            movement_command = create_movement_command('Turn Right 15 Degrees ~~ Target object is to My Right')
                                         elif '45 Degrees To My Left' in current_detection:
-                                            movement_command = 'Turn Left 45 Degrees ~~ Target object is to My Left'
+                                            movement_command = create_movement_command('Turn Left 45 Degrees ~~ Target object is to My Left')
                                         elif '45 Degrees To My Right' in current_detection:
-                                            movement_command = 'Turn Right 45 Degrees ~~ Target object is to My Right'
+                                            movement_command = create_movement_command('Turn Right 45 Degrees ~~ Target object is to My Right')
                                         else:
-                                            movement_command = 'Move Forward One Foot ~~ Moving towards target object'
+                                            movement_command = create_movement_command('Move Forward One Foot ~~ Moving towards target object')
                                         break
                                     else:
                                         yolo_index += 1
@@ -3887,7 +4695,7 @@ def movement_loop():
                                 rando_num = random.choice([1, 2])
                                 yolo_nav_was_true = True
                                 scan360 = 0
-                                movement_command = 'Wait ~~ Target Lost. Going into Find Object mode.'
+                                movement_command = create_movement_command('Wait ~~ Target Lost. Going into Find Object mode.')
                         elif yolo_look == True:
                             yolo_look_index = 0
                             while True:
@@ -3897,26 +4705,26 @@ def movement_loop():
                                     print('LOOK OBJECT: ' + look_object)
                                     if look_object in current_detection:
                                         if '15 Degrees To My Left' in current_detection:
-                                            movement_command = 'Turn Left 15 Degrees ~~ Target object is to My Left'
+                                            movement_command = create_movement_command('Turn Left 15 Degrees ~~ Target object is to My Left')
                                         elif '15 Degrees To My Right' in current_detection:
-                                            movement_command = 'Turn Right 15 Degrees ~~ Target object is to My Right'
+                                            movement_command = create_movement_command('Turn Right 15 Degrees ~~ Target object is to My Right')
                                         elif '45 Degrees To My Left' in current_detection:
-                                            movement_command = 'Turn Left 45 Degrees ~~ Target object is to My Left'
+                                            movement_command = create_movement_command('Turn Left 45 Degrees ~~ Target object is to My Left')
                                         elif '45 Degrees To My Right' in current_detection:
-                                            movement_command = 'Turn Right 45 Degrees ~~ Target object is to My Right'
+                                            movement_command = create_movement_command('Turn Right 45 Degrees ~~ Target object is to My Right')
                                         elif 'above' in current_detection:
-                                            movement_command = 'Raise Camera Angle ~~ Target object is above'
+                                            movement_command = create_movement_command('Raise Camera Angle ~~ Target object is above')
                                         elif 'below' in current_detection:
-                                            movement_command = 'Lower Camera Angle ~~ Target object is below'
+                                            movement_command = create_movement_command('Lower Camera Angle ~~ Target object is below')
                                         else:
-                                            movement_command = 'Wait ~~ Target object is straight ahead'
+                                            movement_command = create_movement_command('Wait ~~ Target object is straight ahead')
                                             yolo_look = False
                                             look_object = ''
                                         break
                                     else:
                                         yolo_look_index += 1
                                         if yolo_look_index >= len(yolo_detections):
-                                            movement_command = 'Wait ~~ Target object lost'
+                                            movement_command = create_movement_command('Wait ~~ Target object lost')
                                             yolo_look = False
                                             yolo_find = True
                                             look_object = ''
@@ -3926,7 +4734,7 @@ def movement_loop():
                                         else:
                                             continue
                                 except:
-                                    movement_command = 'Wait ~~ Center Camera On Specific Yolo Object failed. Must be detecting object first.'
+                                    movement_command = create_movement_command('Wait ~~ Center Camera On Specific Yolo Object failed. Must be detecting object first.')
                                     yolo_look = False
                                     look_object = ''
                                     break
@@ -3939,26 +4747,26 @@ def movement_loop():
                                     current_distance = distance/100
                                     if 'person' in current_detection:
                                         if '15 Degrees To My Left' in current_detection:
-                                            movement_command = 'Turn Left 15 Degrees ~~ Target object is to My Left'
+                                            movement_command = create_movement_command('Turn Left 15 Degrees ~~ Target object is to My Left')
                                         elif '15 Degrees To My Right' in current_detection:
-                                            movement_command = 'Turn Right 15 Degrees ~~ Target object is to My Right'
+                                            movement_command = create_movement_command('Turn Right 15 Degrees ~~ Target object is to My Right')
                                         elif '45 Degrees To My Left' in current_detection:
-                                            movement_command = 'Turn Left 45 Degrees ~~ Target object is to My Left'
+                                            movement_command = create_movement_command('Turn Left 45 Degrees ~~ Target object is to My Left')
                                         elif '45 Degrees To My Right' in current_detection:
-                                            movement_command = 'Turn Right 45 Degrees ~~ Target object is to My Right'
+                                            movement_command = create_movement_command('Turn Right 45 Degrees ~~ Target object is to My Right')
                                         else:
                                             if current_distance > 1.0:
-                                                movement_command = 'Move Forward One Foot ~~ Moving towards person'
+                                                movement_command = create_movement_command('Move Forward One Foot ~~ Moving towards person')
                                             elif current_distance < 0.5:
-                                                movement_command = 'Move Backward ~~ Moving away from person'
+                                                movement_command = create_movement_command('Move Backward ~~ Moving away from person')
                                             else:
-                                                movement_command = 'Wait ~~ Person is straight ahead'
+                                                movement_command = create_movement_command('Wait ~~ Person is straight ahead')
                                         print(movement_command)
                                         break
                                     else:
                                         yolo_look_index += 1
                                         if yolo_look_index >= len(yolo_detections):
-                                            movement_command = 'Wait ~~ Person lost'
+                                            movement_command = create_movement_command('Wait ~~ Person lost')
                                             print('person lost')
                                             follow_user = False
                                             yolo_find = True
@@ -3970,7 +4778,7 @@ def movement_loop():
                                         else:
                                             continue
                                 except:
-                                    movement_command = 'Wait ~~ Follow Person failed. Must be detecting the person first.'
+                                    movement_command = create_movement_command('Wait ~~ Follow Person failed. Must be detecting the person first.')
                                     print('person not detected')
                                     follow_user = False
                                     yolo_find = True
@@ -3990,16 +4798,16 @@ def movement_loop():
                                     if nav_object in current_detection:
                                         yolo_find = False
                                         if '15 Degrees To My Left' in current_detection:
-                                            movement_command = 'Turn Left 15 Degrees ~~ Target object is to My Left'
+                                            movement_command = create_movement_command('Turn Left 15 Degrees ~~ Target object is to My Left')
                                         elif '15 Degrees To My Right' in current_detection:
-                                            movement_command = 'Turn Right 15 Degrees ~~ Target object is to My Right'
+                                            movement_command = create_movement_command('Turn Right 15 Degrees ~~ Target object is to My Right')
                                         elif '45 Degrees To My Left' in current_detection:
-                                            movement_command = 'Turn Left 45 Degrees ~~ Target object is to My Left'
+                                            movement_command = create_movement_command('Turn Left 45 Degrees ~~ Target object is to My Left')
                                         elif '45 Degrees To My Right' in current_detection:
-                                            movement_command = 'Turn Right 45 Degrees ~~ Target object is to My Right'
+                                            movement_command = create_movement_command('Turn Right 45 Degrees ~~ Target object is to My Right')
                                         else:
                                             yolo_find = False
-                                            movement_command = 'Wait ~~ Ending search for '+nav_object+'. Object has successfully been found!'
+                                            movement_command = create_movement_command('Wait ~~ Ending search for '+nav_object+'. Object has successfully been found!')
                                             if yolo_nav_was_true == True:
                                                 yolo_nav = True
                                                 yolo_nav_was_true = False
@@ -4023,31 +4831,35 @@ def movement_loop():
                                         continue
                             if yolo_find == True:
                                 if scan360 < 10 and scan360 > 1:
-                                    movement_command = 'Turn Right 45 Degrees ~~ Doing 360 scan for target object'
+                                    movement_command = create_movement_command('Turn Right 45 Degrees ~~ Doing 360 scan for target object')
                                     scan360 += 1
                                 elif scan360 == 0:
-                                    movement_command = 'Raise Camera Angle ~~ Doing 360 scan for target object'
+                                    movement_command = create_movement_command('Raise Camera Angle ~~ Doing 360 scan for target object')
                                     scan360 += 1
                                 elif scan360 == 1:
-                                    movement_command = 'Lower Camera Angle ~~ Doing 360 scan for target object'
+                                    movement_command = create_movement_command('Lower Camera Angle ~~ Doing 360 scan for target object')
                                     scan360 += 1
                                 else:
                                     if distance < 50.0 and distance >= 20.0:
                                         if rando_num == 1:
-                                            movement_command = 'Turn Left 45 Degrees ~~ Exploring to look for target object'
+                                            movement_command = create_movement_command('Turn Left 45 Degrees ~~ Exploring to look for target object')
                                         elif rando_num == 2:
-                                            movement_command = 'Turn Right 45 Degrees ~~ Exploring to look for target object'
+                                            movement_command = create_movement_command('Turn Right 45 Degrees ~~ Exploring to look for target object')
                                     elif distance < 20.0:
-                                        movement_command = 'Turn Around 180 Degrees'
+                                        movement_command = create_movement_command('Turn Around 180 Degrees')
                                     else:
-                                        movement_command = 'Move Forward One Foot ~~ Exploring to look for target object'
+                                        movement_command = create_movement_command('Move Forward One Foot ~~ Exploring to look for target object')
                         else:
                             move_result = []
-                            movement_command, move_prompt, move_prompt_with_mental, keywords_from_move_command, history_filename1, history_filename2, history_filename3, history_filename4, history_filename5, history_filename6, history_filename7, history_filename8, history_filename9, history_filename10, the_prompt, sys_m, user_said, g_speed, file_data = send_text_to_gpt4_move(per, distance, last_phrase, g_speed)
+                            (movement_command, move_prompt, move_prompt_with_mental, keywords_from_move_command,
+                             history_filename1, history_filename2, history_filename3, history_filename4,
+                             history_filename5, history_filename6, history_filename7, history_filename8,
+                             history_filename9, history_filename10, the_prompt, sys_m, user_said, g_speed,
+                             file_data) = send_text_to_gpt4_move(per, distance, last_phrase, g_speed)
                             if g_speed < 0:
                                 g_speed = 0
                             elif g_speed > 30:
-                                movement_command = 'Go To Sleep'
+                                movement_command = create_movement_command('Go To Sleep')
                                 g_speed = 30
                             else:
                                 pass
@@ -4055,11 +4867,13 @@ def movement_loop():
                     else:
                         movement_command = move_set[0]
                         del move_set[0]
-                    move_failed_command, move_failure_reason, yolo_nav, move_set, yolo_find, nav_object, look_object, follow_user, scan360, camera_vertical_pos, yolo_look, sleep_data, sleep_value, b_gpt_sleep = handle_commands(
+                    move_failed_command, move_failure_reason, yolo_nav, move_set, yolo_find, nav_object, look_object, follow_user, scan360, camera_vertical_pos, grabber_vertical_pos, grabber_state, yolo_look, sleep_data, sleep_value, b_gpt_sleep = handle_commands(
                         distance,
                         current,
                         movement_command,
                         camera_vertical_pos,
+                        grabber_vertical_pos,
+                        grabber_state,
                         move_failed_command,
                         move_failure_reason,
                         yolo_nav,
@@ -4095,6 +4909,11 @@ def movement_loop():
                 print(traceback.format_exc())
         except:
             print(traceback.format_exc())
+    yolo_nav = False
+    yolo_find = False
+    yolo_look = False
+    follow_user = False
+    move_stop = False
 yolo_nav = False
 yolo_find = False
 yolo_look = False
@@ -4105,13 +4924,13 @@ if __name__ == "__main__":
         send_data_to_arduino(["1"], arduino_address)
         send_data_to_arduino(["1"], arduino_address)
         send_data_to_arduino(["2"], arduino_address)
-        time.sleep(2)
+        send_data_to_arduino(["2"], arduino_address)
+        time.sleep(10)
         be_still = True
         last_time_seen = time.time()
         transcribe_thread = threading.Thread(target=listen_and_transcribe)
         transcribe_thread.start()
         time.sleep(5)
-        movement_thread = threading.Thread(target=movement_loop)
-        movement_thread.start()
+        movement_loop()
     except Exception as e:
         print(traceback.format_exc())
