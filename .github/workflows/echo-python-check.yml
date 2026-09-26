@@ -1,0 +1,15 @@
+name: Echo Python syntax check
+
+on:
+  push:
+    branches:
+      - echo-desktop-brain
+  pull_request:
+
+jobs:
+  pycompile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse every Python file
+        run: python -m compileall -q .
