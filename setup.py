@@ -78,8 +78,8 @@ def pi_install():
     ensure_runtime_dirs()
     run(["sudo","apt","update"])
     run(["sudo","apt","install","-y","python3-pip","python3-picamera2","python3-opencv","python3-pyaudio",
-         "python3-smbus","bluez","bluetooth","libbluetooth-dev","portaudio19-dev","alsa-utils","espeak"])
-    pip_install("websockets>=12","pybluez",break_system=True)
+         "python3-smbus","python3-bluez","bluez","bluetooth","libbluetooth-dev","portaudio19-dev","alsa-utils","espeak"])
+    pip_install("websockets>=12",break_system=True)
     print("Copy echo_pi_config.generated.json from the desktop to this folder as echo_pi_config.json.")
     print("Then run: python3 main.py")
 
