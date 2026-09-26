@@ -1,0 +1,16 @@
+# Echo generated credentials / local configuration
+echo_desktop_config.json
+echo_pi_config.json
+echo_pi_config.generated.json
+echo_cert.pem
+echo_key.pem
+
+# Model offload/cache
+offload_echo_qwen/
+__pycache__/
+*.pyc
+
+# Local runtime state
+key.txt
+server_ip.txt
+server_port.txt
